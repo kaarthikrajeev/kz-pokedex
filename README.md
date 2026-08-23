@@ -50,6 +50,21 @@ npm start
 
 Open `http://localhost:4200/` in a browser.
 
+## GitHub Pages Deployment
+
+The `main` branch deploys automatically through GitHub Actions to:
+
+https://kaarthikrajeev.github.io/kz-pokedex/
+
+In the repository settings, set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**.
+The workflow installs dependencies with `npm ci`, builds with the `/kz-pokedex/` base href, and publishes `dist/kz-pokedex/browser`.
+
+For a local production build, run:
+
+```bash
+npm run build
+```
+
 ## Available Scripts
 
 | Command         | Description                                             |
