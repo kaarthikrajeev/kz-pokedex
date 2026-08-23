@@ -1,0 +1,81 @@
+@if (pokemon !== null || loading) {
+  <div class="pokemon-details">
+    @if (loading) {
+      <div class="pokemon-details__loading" aria-busy="true" aria-label="Loading Pokemon details">
+        <div class="pokemon-details__skeleton" aria-hidden="true">
+          <div class="skeleton-line skeleton-line--id"></div>
+          <div class="skeleton-line skeleton-line--title"></div>
+          <div class="pokemon-details__skeleton-content">
+            <div class="skeleton-block skeleton-block--figure"></div>
+            <div class="pokemon-details__skeleton-meta">
+              <div class="skeleton-line skeleton-line--types"></div>
+              <div class="pokemon-details__skeleton-stats">
+                <div class="skeleton-block skeleton-block--stat"></div>
+                <div class="skeleton-block skeleton-block--stat"></div>
+              </div>
+              <div class="skeleton-block skeleton-block--description"></div>
+            </div>
+          </div>
+        </div>
+        <div class="pokemon-details__loader-overlay">
+          <app-pokemon-loader message="Loading details..." />
+        </div>
+      </div>
+    } @else {
+      <div class="pokemon-details__header">
+        <span class="pokemon-details__id">#{{ formatNumber(pokemon?.id ?? 0) }}</span>
+        <h2>{{ pokemon?.name }}</h2>
+      </div>
+
+      <div class="pokemon-details__content">
+        <div class="pokemon-details__figure">
+          <button
+            type="button"
+            class="pokemon-shiny-toggle"
+            [class.pokemon-shiny-toggle--active]="shiny"
+            [attr.aria-label]="shiny ? 'Show normal Pokemon' : 'Show shiny Pokemon'"
+            [title]="shiny ? 'Show normal' : 'Show shiny'"
+            (click)="shinyToggle.emit($event)"
+          >
+            ✦
+          </button>
+
+          @if (spriteLoading()) {
+            <div class="pokemon-details__sprite-loader" aria-label="Loading sprite">
+              <app-pokemon-loader message="Loading sprite..." />
+            </div>
+          }
+
+          <img
+            [class.pokemon-details__sprite--loading]="spriteLoading()"
+            [src]="sprite"
+            [alt]="pokemon?.name ?? 'Pokemon'"
+            (load)="onSpriteLoad()"
+            (error)="onSpriteError($event)"
+          />
+        </div>
+
+        <div class="pokemon-details__meta">
+          <div class="pokemon-types">
+            @for (type of pokemon?.types; track type) {
+              <span class="type {{ type }}">{{ type }}</span>
+            }
+          </div>
+
+          <div class="pokemon-stats">
+            <div class="stat-box">
+              <span class="stat-label">Height</span>
+              <strong>{{ pokemon?.height }}m</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Weight</span>
+              <strong>{{ pokemon?.weight }}kg</strong>
+            </div>
+          </div>
+
+          <p class="pokemon-description">{{ pokemon?.description }}</p>
+        </div>
+      </div>
+    }
+  </div>
+}

@@ -1,1 +1,177 @@
-/* You can add global styles to this file, and also import other style files */
+@import './styles/types.css';
+
+:root {
+  color-scheme: dark;
+  --bg: #121212;
+  --bg-alt: #1d1d1d;
+  --panel: #f6f0e8;
+  --panel-alt: #e5ddcf;
+  --ink: #111111;
+  --muted: #4b3f3a;
+  --red: #ff5a3c;
+  --outline: #111111;
+  --shadow: #000000;
+}
+
+html {
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: #f5f5f5;
+  font-family: 'Segoe UI', 'Trebuchet MS', Arial, sans-serif;
+  font-weight: 700;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.pokemon-details__loading {
+  position: relative;
+  min-height: 360px;
+  padding: 1.2rem 0 0;
+}
+
+.pokemon-details__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  opacity: 0.72;
+}
+
+.pokemon-details__skeleton-content {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.pokemon-details__skeleton-meta,
+.pokemon-details__skeleton-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pokemon-details__skeleton-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.skeleton-line,
+.skeleton-block {
+  position: relative;
+  overflow: hidden;
+  background: #d8d1c6;
+  border: 3px solid var(--outline);
+}
+
+.skeleton-line::after,
+.skeleton-block::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.45) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-line--id {
+  width: 4.5rem;
+  height: 2rem;
+}
+
+.skeleton-line--title {
+  width: min(70%, 19rem);
+  height: 3.2rem;
+}
+
+.skeleton-block--figure {
+  aspect-ratio: 1;
+  box-shadow: 6px 6px 0 var(--outline);
+}
+
+.skeleton-line--types {
+  width: 8rem;
+  height: 1.8rem;
+}
+
+.skeleton-block--stat {
+  height: 5rem;
+}
+
+.skeleton-block--description {
+  min-height: 5.5rem;
+}
+
+.pokemon-details__loader-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 640px) {
+  .pokemon-details__skeleton-content {
+    grid-template-columns: 1fr;
+  }
+
+  .skeleton-block--figure {
+    width: min(100%, 240px);
+  }
+}
+
+[popover] {
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
+[popover]:popover-open {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [popover],
+  .pokemon-card,
+  .search-box,
+  .dialog-close {
+    transition: none;
+  }
+
+  .skeleton-line::after,
+  .skeleton-block::after {
+    animation: none;
+  }
+}

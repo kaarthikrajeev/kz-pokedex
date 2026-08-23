@@ -1,0 +1,20 @@
+<button class="pokemon-card" type="button" popovertarget="details" (click)="selected.emit(pokemon)">
+  <span class="pokemon-card__number">#{{ formatNumber(pokemon.id) }}</span>
+
+  <div class="pokemon-card__image-wrap">
+    @if (sprite) {
+      <img [src]="sprite" [alt]="pokemon.name" (error)="imageError.emit($event)" />
+    } @else {
+      <span class="pokemon-card__placeholder" aria-hidden="true">?</span>
+    }
+  </div>
+
+  <div class="pokemon-card__footer">
+    <h3>{{ pokemon.name }}</h3>
+    <div class="pokemon-card__types">
+      @for (type of pokemon.types.slice(0, 2); track type) {
+        <span class="type {{ type }}">{{ type }}</span>
+      }
+    </div>
+  </div>
+</button>

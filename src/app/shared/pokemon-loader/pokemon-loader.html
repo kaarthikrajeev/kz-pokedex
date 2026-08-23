@@ -1,0 +1,19 @@
+<div
+  class="pokemon-loader"
+  role="status"
+  aria-live="polite"
+  [attr.aria-label]="message"
+>
+  <div class="pokemon-loader__ball-wrapper" aria-hidden="true">
+    <div class="pokemon-loader__ball">
+      <div class="pokemon-loader__half pokemon-loader__half--top"></div>
+      <div class="pokemon-loader__divider"></div>
+      <div class="pokemon-loader__half pokemon-loader__half--bottom"></div>
+      <div class="pokemon-loader__button"></div>
+    </div>
+  </div>
+
+  @if (message) {
+  <span class="pokemon-loader__text">{{ message }}</span>
+  }
+</div>
