@@ -5,7 +5,8 @@ import { map, catchError, switchMap, shareReplay } from 'rxjs/operators';
 import { Pokemon } from '../models/types';
 
 const POKE_API_BASE_URL = 'https://pokeapi.co/api/v2';
-const POKEMON_SPRITE_BASE_URL = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
+const POKEMON_SPRITE_BASE_URL =
+  'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
 const POKEMON_SHINY_SPRITE_BASE_URL = `${POKEMON_SPRITE_BASE_URL}/shiny`;
 
 @Injectable({
@@ -16,6 +17,66 @@ export class PokedexService {
   private readonly pokemonRequests = new Map<string, Observable<Pokemon>>();
 
   constructor(private readonly http: HttpClient) {}
+
+  getPokemonPage(
+    limit: number,
+    offset: number,
+  ): Observable<{ pokemon: Pokemon[]; total: number; hasMore: boolean }> {
+    return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon?limit=${limit}&offset=${offset}`).pipe(
+      map((response): { pokemon: Pokemon[]; total: number } => {
+        const results = Array.isArray(response?.results) ? response.results : [];
+        const total = Number(response?.count ?? 0);
+
+        return {
+          pokemon: results
+            .map((entry: any) => {
+              const name = String(entry.name ?? '').trim();
+              const url = String(entry.url ?? '').trim();
+              const id = this.extractIdFromUrl(url);
+
+              if (!id || !name) {
+                return null;
+              }
+
+              return {
+                id,
+                name,
+                types: [],
+                height: 0,
+                weight: 0,
+                sprite: this.getSpriteUrl(id),
+                spriteShiny: this.getShinySpriteUrl(id),
+                description: '',
+              } satisfies Pokemon;
+            })
+            .filter((pokemon: any): pokemon is Pokemon => Boolean(pokemon)),
+          total,
+        };
+      }),
+      switchMap(({ pokemon: pokemonList, total }) =>
+        forkJoin(
+          pokemonList.map((pokemon) =>
+            this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
+              map((details) => ({
+                ...pokemon,
+                types: Array.isArray(details?.types)
+                  ? details.types.map((entry: any) => entry.type?.name).filter(Boolean)
+                  : [],
+              })),
+              catchError(() => of(pokemon)),
+            ),
+          ),
+        ).pipe(
+          map((pokemonWithTypes) => ({
+            pokemon: pokemonWithTypes,
+            total,
+            hasMore: offset + pokemonList.length < total,
+          })),
+        ),
+      ),
+      catchError(() => throwError(() => new Error('Unable to load Pokémon page.'))),
+    );
+  }
 
   getPokedex(): Observable<Pokemon[]> {
     return this.http.get<any>(`${POKE_API_BASE_URL}/pokedex/kanto`).pipe(
@@ -39,7 +100,7 @@ export class PokedexService {
               weight: 0,
               sprite: this.getSpriteUrl(id),
               spriteShiny: this.getShinySpriteUrl(id),
-              description: ''
+              description: '',
             } satisfies Pokemon;
           })
           .filter((pokemon: any): pokemon is Pokemon => Boolean(pokemon));
@@ -52,14 +113,14 @@ export class PokedexService {
                 ...pokemon,
                 types: Array.isArray(details?.types)
                   ? details.types.map((entry: any) => entry.type?.name).filter(Boolean)
-                  : []
+                  : [],
               })),
-              catchError(() => of(pokemon))
-            )
-          )
-        )
+              catchError(() => of(pokemon)),
+            ),
+          ),
+        ),
       ),
-      catchError(() => throwError(() => new Error('Unable to load the Pokémon list right now.')))
+      catchError(() => throwError(() => new Error('Unable to load the Pokémon list right now.'))),
     );
   }
 
@@ -79,7 +140,7 @@ export class PokedexService {
 
     const request = forkJoin({
       pokemon: this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${nameOrId}`),
-      species: this.http.get<any>(`${POKE_API_BASE_URL}/pokemon-species/${nameOrId}`)
+      species: this.http.get<any>(`${POKE_API_BASE_URL}/pokemon-species/${nameOrId}`),
     }).pipe(
       map(({ pokemon, species }) => {
         const mappedPokemon = this.mapPokemonDetails(pokemon, species);
@@ -90,7 +151,7 @@ export class PokedexService {
         this.pokemonRequests.delete(cacheKey);
         return throwError(() => new Error('Unable to load Pokémon details right now.'));
       }),
-      shareReplay({ bufferSize: 1, refCount: false })
+      shareReplay({ bufferSize: 1, refCount: false }),
     );
 
     this.pokemonRequests.set(cacheKey, request);
@@ -105,6 +166,11 @@ export class PokedexService {
     return `${POKEMON_SHINY_SPRITE_BASE_URL}/${id}.png`;
   }
 
+  private extractIdFromUrl(url: string): number {
+    const match = url.match(/\/pokemon\/(\d+)\//);
+    return match ? Number(match[1]) : 0;
+  }
+
   private mapPokemonDetails(pokemon: any, species: any): Pokemon {
     const types = Array.isArray(pokemon?.types)
       ? pokemon.types.map((entry: any) => entry.type?.name).filter(Boolean)
@@ -117,16 +183,23 @@ export class PokedexService {
       height: Number((pokemon?.height ?? 0) / 10),
       weight: Number((pokemon?.weight ?? 0) / 10),
       sprite: pokemon?.sprites?.front_default ?? this.getSpriteUrl(Number(pokemon?.id ?? 0)),
-      spriteShiny: pokemon?.sprites?.front_shiny ?? pokemon?.sprites?.front_default ?? this.getSpriteUrl(Number(pokemon?.id ?? 0)),
-      description: this.getDescription(species)
+      spriteShiny:
+        pokemon?.sprites?.front_shiny ??
+        pokemon?.sprites?.front_default ??
+        this.getSpriteUrl(Number(pokemon?.id ?? 0)),
+      description: this.getDescription(species),
     };
   }
 
   private getDescription(species: any): string {
     const entries = Array.isArray(species?.flavor_text_entries) ? species.flavor_text_entries : [];
     const englishEntry = entries.find((entry: any) => entry.language?.name === 'en');
-    const description = englishEntry?.flavor_text ?? entries[0]?.flavor_text ?? 'No description available.';
+    const description =
+      englishEntry?.flavor_text ?? entries[0]?.flavor_text ?? 'No description available.';
 
-    return description.replace(/\f/g, ' ').replace(/\s*\n\s*/g, ' ').trim();
+    return description
+      .replace(/\f/g, ' ')
+      .replace(/\s*\n\s*/g, ' ')
+      .trim();
   }
 }
