@@ -30,9 +30,20 @@
       <div class="type-filters">
         <button
           type="button"
+          class="type-filter-button type-filter-button--favorites"
+          [class.is-active]="showFavoritesOnly()"
+          [attr.aria-pressed]="showFavoritesOnly()"
+          (click)="toggleFavoritesFilter()"
+        >
+          <span class="type-filter-button__star" aria-hidden="true">★</span>
+          FAVORITES ({{ favorites().size }})
+        </button>
+
+        <button
+          type="button"
           class="type-filter-button type-filter-button--all"
-          [class.is-active]="selectedTypes().length === 0"
-          [attr.aria-pressed]="selectedTypes().length === 0"
+          [class.is-active]="selectedTypes().length === 0 && !showFavoritesOnly()"
+          [attr.aria-pressed]="selectedTypes().length === 0 && !showFavoritesOnly()"
           (click)="filterByType('all')"
         >
           <span class="type-filter-button__indicator" aria-hidden="true"></span>
@@ -42,7 +53,7 @@
           <button
             type="button"
             class="type-filter-button"
-            [ngClass]="'type-filter-button--' + type"
+            [ngClass]="'type-filter-button--' + sanitizeType(type)"
             [class.is-active]="selectedTypes().includes(type)"
             [class.is-disabled]="isTypeDisabled(type)"
             [attr.aria-pressed]="selectedTypes().includes(type)"
@@ -65,8 +76,12 @@
 
     @if (filteredPokemon().length === 0 && !loading()) {
       <div class="empty-state">
-        <p class="empty-state__message">No Pokémon found.</p>
-        <p class="empty-state__hint">Try changing your search or selected type.</p>
+        <p class="empty-state__message">
+          {{ showFavoritesOnly() ? 'No favorite Pokémon found.' : 'No Pokémon found.' }}
+        </p>
+        <p class="empty-state__hint">
+          {{ showFavoritesOnly() ? 'Click the star icon (★) on any Pokémon card to add it to your favorites.' : 'Try changing your search or selected type.' }}
+        </p>
         <button type="button" class="empty-state__button" (click)="clearFilters()">
           Clear Filters
         </button>
@@ -83,7 +98,7 @@
         />
       }
 
-      @if (pageLoading()) {
+      @if (pageLoading() && !showFavoritesOnly()) {
         @for (i of [0, 1, 2, 3, 4, 5]; track i) {
           <div class="pokemon-card pokemon-card--skeleton" aria-hidden="true">
             <div

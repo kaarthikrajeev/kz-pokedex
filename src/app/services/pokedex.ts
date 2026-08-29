@@ -1,19 +1,22 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal, Signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, forkJoin, throwError } from 'rxjs';
 import { map, catchError, switchMap, shareReplay } from 'rxjs/operators';
-import { Pokemon } from '../models/types';
+import { Pokemon, PokemonAbility, PokemonStat } from '../models/types';
+import { sanitizePokemonType, sanitizeStatName, VALID_STAT_NAMES } from '../models/pokemon-types';
 
 const POKE_API_BASE_URL = 'https://pokeapi.co/api/v2';
 const POKEMON_SPRITE_BASE_URL =
   'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
 const POKEMON_SHINY_SPRITE_BASE_URL = `${POKEMON_SPRITE_BASE_URL}/shiny`;
+const POKEMON_CACHE_STORAGE_KEY = 'pokedex_pokemon_details_cache_v2';
 
 @Injectable({
   providedIn: 'root',
 })
 export class PokedexService {
-  private readonly pokemonCache = new Map<string, Pokemon>();
+  private readonly cacheSignal = signal<Map<string, Pokemon>>(this.loadInitialCache());
+  public readonly pokemonCache: Signal<Map<string, Pokemon>> = this.cacheSignal.asReadonly();
   private readonly pokemonRequests = new Map<string, Observable<Pokemon>>();
 
   constructor(private readonly http: HttpClient) {}
@@ -55,17 +58,25 @@ export class PokedexService {
       }),
       switchMap(({ pokemon: pokemonList, total }) =>
         forkJoin(
-          pokemonList.map((pokemon) =>
-            this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
+          pokemonList.map((pokemon) => {
+            const cached = this.pokemonCache().get(String(pokemon.id));
+            if (cached && cached.types && cached.types.length > 0) {
+              return of({
+                ...pokemon,
+                types: cached.types,
+              });
+            }
+
+            return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
               map((details) => ({
                 ...pokemon,
                 types: Array.isArray(details?.types)
-                  ? details.types.map((entry: any) => entry.type?.name).filter(Boolean)
+                  ? details.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
                   : [],
               })),
               catchError(() => of(pokemon)),
-            ),
-          ),
+            );
+          }),
         ).pipe(
           map((pokemonWithTypes) => ({
             pokemon: pokemonWithTypes,
@@ -107,17 +118,25 @@ export class PokedexService {
       }),
       switchMap((pokemonList: Pokemon[]) =>
         forkJoin(
-          pokemonList.map((pokemon) =>
-            this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
+          pokemonList.map((pokemon) => {
+            const cached = this.pokemonCache().get(String(pokemon.id));
+            if (cached && cached.types && cached.types.length > 0) {
+              return of({
+                ...pokemon,
+                types: cached.types,
+              });
+            }
+
+            return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
               map((details) => ({
                 ...pokemon,
                 types: Array.isArray(details?.types)
-                  ? details.types.map((entry: any) => entry.type?.name).filter(Boolean)
+                  ? details.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
                   : [],
               })),
               catchError(() => of(pokemon)),
-            ),
-          ),
+            );
+          }),
         ),
       ),
       catchError(() => throwError(() => new Error('Unable to load the Pokémon list right now.'))),
@@ -126,9 +145,9 @@ export class PokedexService {
 
   getPokemonDetails(nameOrId: string | number): Observable<Pokemon> {
     const cacheKey = String(nameOrId).toLowerCase();
-    const cachedPokemon = this.pokemonCache.get(cacheKey);
+    const cachedPokemon = this.pokemonCache().get(cacheKey);
 
-    if (cachedPokemon) {
+    if (cachedPokemon && this.hasCompleteDetails(cachedPokemon)) {
       return of(cachedPokemon);
     }
 
@@ -144,7 +163,8 @@ export class PokedexService {
     }).pipe(
       map(({ pokemon, species }) => {
         const mappedPokemon = this.mapPokemonDetails(pokemon, species);
-        this.pokemonCache.set(cacheKey, mappedPokemon);
+        this.savePokemonToCache(mappedPokemon);
+        this.pokemonRequests.delete(cacheKey);
         return mappedPokemon;
       }),
       catchError(() => {
@@ -156,6 +176,84 @@ export class PokedexService {
 
     this.pokemonRequests.set(cacheKey, request);
     return request;
+  }
+
+  clearCache(): void {
+    this.cacheSignal.set(new Map());
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.removeItem(POKEMON_CACHE_STORAGE_KEY);
+      } catch (error) {
+        console.warn('Failed to clear Pokémon cache from localStorage:', error);
+      }
+    }
+  }
+
+  private savePokemonToCache(pokemon: Pokemon): void {
+    const updatedMap = new Map(this.cacheSignal());
+    updatedMap.set(String(pokemon.id), pokemon);
+    if (pokemon.name) {
+      updatedMap.set(pokemon.name.toLowerCase(), pokemon);
+    }
+    this.cacheSignal.set(updatedMap);
+    this.persistToStorage(updatedMap);
+  }
+
+  private loadInitialCache(): Map<string, Pokemon> {
+    const map = new Map<string, Pokemon>();
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return map;
+    }
+
+    try {
+      const rawData = localStorage.getItem(POKEMON_CACHE_STORAGE_KEY);
+      if (rawData) {
+        const parsed: Pokemon[] = JSON.parse(rawData);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item && typeof item.id === 'number') {
+              map.set(String(item.id), item);
+              if (item.name) {
+                map.set(item.name.toLowerCase(), item);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load Pokémon cache from localStorage:', error);
+    }
+
+    return map;
+  }
+
+  private persistToStorage(map: Map<string, Pokemon>): void {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    try {
+      const uniquePokemonMap = new Map<number, Pokemon>();
+      for (const pokemon of map.values()) {
+        if (pokemon && typeof pokemon.id === 'number') {
+          uniquePokemonMap.set(pokemon.id, pokemon);
+        }
+      }
+      const uniqueList = Array.from(uniquePokemonMap.values());
+      localStorage.setItem(POKEMON_CACHE_STORAGE_KEY, JSON.stringify(uniqueList));
+    } catch (error) {
+      console.warn('Failed to persist Pokémon cache to localStorage:', error);
+    }
+  }
+
+  private hasCompleteDetails(pokemon: Pokemon): boolean {
+    return Boolean(
+      pokemon &&
+        Array.isArray(pokemon.stats) &&
+        pokemon.stats.length > 0 &&
+        Array.isArray(pokemon.abilities) &&
+        pokemon.abilities.length > 0,
+    );
   }
 
   private getSpriteUrl(id: number): string {
@@ -173,8 +271,39 @@ export class PokedexService {
 
   private mapPokemonDetails(pokemon: any, species: any): Pokemon {
     const types = Array.isArray(pokemon?.types)
-      ? pokemon.types.map((entry: any) => entry.type?.name).filter(Boolean)
+      ? pokemon.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
       : [];
+
+    const baseExperience = Number(pokemon?.base_experience ?? 0);
+
+    const abilities: PokemonAbility[] = Array.isArray(pokemon?.abilities)
+      ? pokemon.abilities
+          .map((entry: any) => ({
+            name: String(entry.ability?.name ?? '').trim(),
+            isHidden: Boolean(entry.is_hidden),
+          }))
+          .filter((a: PokemonAbility) => Boolean(a.name))
+      : [];
+
+    const statLabels: Record<string, string> = VALID_STAT_NAMES;
+
+    const rawStats = Array.isArray(pokemon?.stats) ? pokemon.stats : [];
+    let totalStats = 0;
+
+    const stats: PokemonStat[] = Object.keys(statLabels).map((statKey) => {
+      const sanitizedKey = sanitizeStatName(statKey);
+      const found = rawStats.find((s: any) => sanitizeStatName(s.stat?.name) === sanitizedKey);
+      const baseStat = Number(found?.base_stat ?? 0);
+      totalStats += baseStat;
+      const percentage = Math.min(100, Math.round((baseStat / 255) * 100));
+
+      return {
+        name: sanitizedKey,
+        displayName: statLabels[statKey],
+        baseStat,
+        percentage,
+      };
+    });
 
     return {
       id: Number(pokemon?.id ?? 0),
@@ -188,6 +317,10 @@ export class PokedexService {
         pokemon?.sprites?.front_default ??
         this.getSpriteUrl(Number(pokemon?.id ?? 0)),
       description: this.getDescription(species),
+      baseExperience,
+      abilities,
+      stats,
+      totalStats,
     };
   }
 

@@ -32,6 +32,18 @@ export interface Type {
   };
 }
 
+export interface PokemonAbility {
+  name: string;
+  isHidden: boolean;
+}
+
+export interface PokemonStat {
+  name: string;
+  displayName: string;
+  baseStat: number;
+  percentage: number;
+}
+
 export interface Pokemon {
   id: number;
   name: string;
@@ -41,4 +53,8 @@ export interface Pokemon {
   sprite: string | null;
   spriteShiny?: string | null;
   description?: string;
+  baseExperience?: number;
+  abilities?: PokemonAbility[];
+  stats?: PokemonStat[];
+  totalStats?: number;
 }
