@@ -1,117 +1,77 @@
-🚀 Angular Pokédex v1.1.0
-🌍 Expanded Beyond Kanto
+# 🔴⚪ Angular Pokédex ⚪🔴
 
-The Pokédex has been upgraded from the original Kanto-only experience to support browsing Pokémon from the complete PokeAPI collection.
+⚡ A vibrant, responsive Pokédex built with **Angular 20**! It loads Pokémon from [PokeAPI](https://pokeapi.co/) using efficient pagination and infinite scroll, provides local name and type filtering, and opens a detailed view with both normal and ✨shiny✨ sprites.
 
-This release focuses on improved scalability, performance, filtering, loading experience, and API efficiency.
+---
 
-✨ What's New
-🌐 All Pokémon Support
-Replaced the Kanto-specific Pokédex loading approach.
-Pokémon are now loaded from the PokeAPI Pokémon resource.
-The application is no longer limited to the Kanto region.
-Pokémon are loaded incrementally instead of fetching the complete dataset at startup.
-♾️ Infinite Scroll & Pagination
-Added efficient PokeAPI pagination.
-Pokémon are loaded in batches of 24 entries.
-Added IntersectionObserver-based infinite scrolling.
-Additional Pokémon are automatically loaded when reaching the end of the list.
-Prevents unnecessary duplicate API requests during scrolling.
-🦴 Skeleton Loading
-Added Neo-Brutalist Pokémon card skeletons while loading new Pokémon pages.
-Existing Pokémon remain visible while the next page loads.
-Added sprite-level loading placeholders to prevent layout shifts.
-Pokémon cards can render their available information while sprites continue loading.
-🔍 Improved Type Filtering
-Added support for selecting up to two Pokémon types simultaneously.
-Multiple selected types use AND filtering.
+## ✨ Features
 
-Example:
+*   📖 **Complete Roster:** Lists all Pokémon from the PokeAPI with numbered cards.
+*   🔄 **Infinite Scroll:** Loads Pokémon efficiently using pagination (24 per page).
+*   🎨 **Vibrant UI:** Displays Pokémon sprites and type badges with type-specific colors.
+*   🔍 **Smart Search:** Filters the list by name in real-time while typing.
+*   🧬 **Advanced Filtering:** Filters by Pokémon type (supports selecting up to 2 types simultaneously with AND logic).
+*   📱 **Native Popovers:** Opens details in a native dialog element.
+*   📏 **Detailed Stats:** Shows types, height, weight, and species descriptions.
+*   🌟 **Shiny Toggle:** Switches reliably between normal and shiny sprites.
+*   🦴 **Smooth Loading:** Shows skeleton loaders while fetching new pages.
+*   🔴 **Poké Ball Spinners:** Shows a detail skeleton and rotating Poké Ball loader during API requests.
+*   🖼️ **Sprite States:** Shows a sprite loader while normal or shiny images load.
+*   🛡️ **Safe Fallbacks:** Handles missing images or shiny sprites gracefully.
+*   🛑 **Race Condition Protection:** Prevents stale detail responses from replacing the currently selected Pokémon.
+*   🧠 **Smart Caching:** Caches completed detail data and shares in-flight detail requests.
+*   ⚡ **Preloading:** Preloads each opened Pokémon's normal and shiny sprite URL once per session.
 
-FIRE + FLYING
+## 🛠️ Tech Stack
 
-Only Pokémon containing both types are displayed.
+*   🛡️ **Angular 20** (Standalone components, Signals, modern control flow)
+*   🟦 **TypeScript**
+*   🌐 **Angular HttpClient & RxJS**
+*   🎨 **CSS**
+*   🧪 **Jasmine, Karma, & ChromeHeadless**
 
-Selecting ALL clears active type filters.
-Active filters are visually highlighted.
-Prevents selecting more than two types.
-✨ Improved Shiny Sprite Handling
-Improved normal and shiny sprite switching reliability.
-Added caching to reduce unnecessary sprite loading.
-Preloads normal and shiny sprites when Pokémon details are opened.
-Handles unavailable shiny or normal sprites safely.
-⚡ Performance & Caching Improvements
-Completed Pokémon detail responses are cached in memory.
-In-flight detail requests are shared to prevent duplicate API calls.
-Previously loaded Pokémon are retained while browsing.
-Sprite URLs are preloaded only once per session.
-Browser-native image caching is reused.
-🎨 UI & UX Improvements
-Added clearer selected states for Pokémon type filters.
-Improved loading feedback across the application.
-Added reusable Neo-Brutalist skeleton cards.
-Improved sprite loading experience.
-Maintained consistent card sizing when search or filtering produces only one or two Pokémon.
-Preserved the existing Neo-Brutalist Pokédex visual style.
-🏗️ Technical Improvements
-Angular 20 standalone architecture maintained.
-Angular Signals continue to manage application state.
-Efficient paginated API loading added.
-IntersectionObserver used instead of continuous scroll listeners.
-Existing reusable PokemonLoaderComponent integrated into loading flows.
-Search, filtering, caching, and pagination work together without unnecessary data duplication.
-🔄 Updated Data Flow
+## 🎒 Requirements
+
+*   🟢 **Node.js LTS**
+*   📦 **npm**
+*   📡 **Internet access** (required to catch 'em all remotely via API)
+*   🌐 **Chrome or Chromium** for browser-based tests
+
+## 🚀 Getting Started
+
+Equip your dependencies:
+
+```bash
+npm install
+
+🏛️ Architecture
+App owns the page-level state and coordinates the service like a true Pokémon Trainer:
+
+Plaintext
 PokeAPI
-   ↓
-Paginated Pokémon List
-   ↓
-Load Current Batch
-   ↓
-Fetch Required Pokémon Details
-   ↓
-Cache Results
-   ↓
-Append to Pokémon List
-   ↓
-Search + Type Filters
-   ↓
-Pokémon Grid
-   ↓
-IntersectionObserver
-   ↓
-Load Next Batch
-🐛 Improvements
-Reduced unnecessary API requests.
-Prevented duplicate loading during rapid scrolling.
-Improved shiny sprite switching reliability.
-Prevented stale Pokémon detail responses from replacing the currently selected Pokémon.
-Prevented oversized cards when search/filter results contain only one or two Pokémon.
-Added safer handling for unavailable sprites.
-🚀 Try It
+  -> PokedexService
+  -> cached Pokemon detail data
+  -> activePokemon signal
+  -> isShiny signal
+  -> currentSprite computed signal
+  -> detail image
+The UI is split into standalone components:
 
-Angular Pokédex Live Demo
+🎴 PokemonCardComponent: Renders one list entry and emits selection events.
 
-📦 Version
+🔍 PokemonDetailsComponent: Renders the dialog content, sprite loading state, skeleton, and shiny toggle.
 
-v1.1.0
+🔴 PokemonLoaderComponent: Provides the reusable rotating Poké Ball loader.
 
-Previous Release
-v1.0.0
-Kanto Pokédex
-- Kanto Pokémon browsing
-- Name search
-- Pokémon details
-- Normal and shiny sprites
-- Initial API integration
-Current Release
-v1.1.0
-Expanded Pokédex
-- All Pokémon support
-- Pagination
-- Infinite scrolling
-- Skeleton loading
-- Sprite loading states
-- Multi-type filtering
-- Improved caching
-- Improved shiny sprite handling
-- Performance improvements
+💾 Caching and Sprite Loading
+🧠 Completed detail responses are stored in an in-memory Map.
+
+🤝 Duplicate detail requests made while a request is pending share one observable through shareReplay.
+
+🚀 Normal and shiny image URLs are preloaded only when a Pokémon is opened.
+
+🛡️ An in-memory Set prevents duplicate preloads during the current session.
+
+📦 The browser's native HTTP image cache is reused (no cache-busting query parameters).
+
+🌀 The full Poké Ball loader is used for API loading. A smaller loader inside the detail image box is used for sprites.
