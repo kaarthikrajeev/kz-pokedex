@@ -1,12 +1,13 @@
 import { Component, EventEmitter, Input, Output, SimpleChanges, signal } from '@angular/core';
-import { Pokemon } from '../../models/types';
+import { Pokemon, PokemonAbility, PokemonStat } from '../../models/types';
 import { PokemonLoaderComponent } from '../pokemon-loader/pokemon-loader';
 
 @Component({
   selector: 'app-pokemon-details',
   standalone: true,
   imports: [PokemonLoaderComponent],
-  templateUrl: './pokemon-details.html'
+  templateUrl: './pokemon-details.html',
+  styleUrl: './pokemon-details.css',
 })
 export class PokemonDetailsComponent {
   @Input() pokemon: Pokemon | null = null;
@@ -34,5 +35,20 @@ export class PokemonDetailsComponent {
 
   protected formatNumber(value: number): string {
     return value.toString().padStart(3, '0');
+  }
+
+  protected get abilities(): PokemonAbility[] {
+    return this.pokemon?.abilities ?? [];
+  }
+
+  protected get stats(): PokemonStat[] {
+    return this.pokemon?.stats ?? [];
+  }
+
+  protected get totalStats(): number {
+    if (!this.pokemon?.stats || this.pokemon.stats.length === 0) {
+      return this.pokemon?.totalStats ?? 0;
+    }
+    return this.pokemon.stats.reduce((sum, stat) => sum + stat.baseStat, 0);
   }
 }

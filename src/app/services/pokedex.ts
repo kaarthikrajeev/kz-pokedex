@@ -2,13 +2,13 @@ import { Injectable, signal, Signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, forkJoin, throwError } from 'rxjs';
 import { map, catchError, switchMap, shareReplay } from 'rxjs/operators';
-import { Pokemon } from '../models/types';
+import { Pokemon, PokemonAbility, PokemonStat } from '../models/types';
 
 const POKE_API_BASE_URL = 'https://pokeapi.co/api/v2';
 const POKEMON_SPRITE_BASE_URL =
   'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon';
 const POKEMON_SHINY_SPRITE_BASE_URL = `${POKEMON_SPRITE_BASE_URL}/shiny`;
-const POKEMON_CACHE_STORAGE_KEY = 'pokedex_pokemon_details_cache';
+const POKEMON_CACHE_STORAGE_KEY = 'pokedex_pokemon_details_cache_v2';
 
 @Injectable({
   providedIn: 'root',
@@ -146,7 +146,7 @@ export class PokedexService {
     const cacheKey = String(nameOrId).toLowerCase();
     const cachedPokemon = this.pokemonCache().get(cacheKey);
 
-    if (cachedPokemon) {
+    if (cachedPokemon && this.hasCompleteDetails(cachedPokemon)) {
       return of(cachedPokemon);
     }
 
@@ -245,6 +245,16 @@ export class PokedexService {
     }
   }
 
+  private hasCompleteDetails(pokemon: Pokemon): boolean {
+    return Boolean(
+      pokemon &&
+        Array.isArray(pokemon.stats) &&
+        pokemon.stats.length > 0 &&
+        Array.isArray(pokemon.abilities) &&
+        pokemon.abilities.length > 0,
+    );
+  }
+
   private getSpriteUrl(id: number): string {
     return `${POKEMON_SPRITE_BASE_URL}/${id}.png`;
   }
@@ -263,6 +273,43 @@ export class PokedexService {
       ? pokemon.types.map((entry: any) => entry.type?.name).filter(Boolean)
       : [];
 
+    const baseExperience = Number(pokemon?.base_experience ?? 0);
+
+    const abilities: PokemonAbility[] = Array.isArray(pokemon?.abilities)
+      ? pokemon.abilities
+          .map((entry: any) => ({
+            name: String(entry.ability?.name ?? '').trim(),
+            isHidden: Boolean(entry.is_hidden),
+          }))
+          .filter((a: PokemonAbility) => Boolean(a.name))
+      : [];
+
+    const statLabels: Record<string, string> = {
+      hp: 'HP',
+      attack: 'ATK',
+      defense: 'DEF',
+      'special-attack': 'SP. ATK',
+      'special-defense': 'SP. DEF',
+      speed: 'SPEED',
+    };
+
+    const rawStats = Array.isArray(pokemon?.stats) ? pokemon.stats : [];
+    let totalStats = 0;
+
+    const stats: PokemonStat[] = Object.keys(statLabels).map((statKey) => {
+      const found = rawStats.find((s: any) => s.stat?.name === statKey);
+      const baseStat = Number(found?.base_stat ?? 0);
+      totalStats += baseStat;
+      const percentage = Math.min(100, Math.round((baseStat / 255) * 100));
+
+      return {
+        name: statKey,
+        displayName: statLabels[statKey],
+        baseStat,
+        percentage,
+      };
+    });
+
     return {
       id: Number(pokemon?.id ?? 0),
       name: String(pokemon?.name ?? ''),
@@ -275,6 +322,10 @@ export class PokedexService {
         pokemon?.sprites?.front_default ??
         this.getSpriteUrl(Number(pokemon?.id ?? 0)),
       description: this.getDescription(species),
+      baseExperience,
+      abilities,
+      stats,
+      totalStats,
     };
   }
 

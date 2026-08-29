@@ -1,6 +1,7 @@
 import {
   Component,
   computed,
+  effect,
   inject,
   signal,
   ViewEncapsulation,
@@ -10,7 +11,7 @@ import {
   ElementRef,
   AfterViewInit,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { PokedexService } from './services/pokedex';
 import { Pokemon } from './models/types';
 import { PokemonCardComponent } from './shared/pokemon-card/pokemon-card';
@@ -26,11 +27,34 @@ import { POKEMON_TYPES } from './models/pokemon-types';
   encapsulation: ViewEncapsulation.None,
 })
 export class App implements OnInit, AfterViewInit, OnDestroy {
+  readonly #document = inject(DOCUMENT);
   #pokemonService = inject(PokedexService);
   #pokemon = signal<Pokemon[]>([]);
   protected searchQuery = signal<string>('');
   protected selectedTypes = signal<string[]>([]);
   protected activePokemon = signal<Pokemon | null>(null);
+
+  constructor() {
+    effect((onCleanup) => {
+      const isOpen = Boolean(this.activePokemon());
+      const body = this.#document?.body;
+      if (body) {
+        body.classList.toggle('modal-open', isOpen);
+        if (isOpen) {
+          body.style.overflow = 'hidden';
+        } else {
+          body.style.removeProperty('overflow');
+        }
+      }
+
+      onCleanup(() => {
+        if (body) {
+          body.classList.remove('modal-open');
+          body.style.removeProperty('overflow');
+        }
+      });
+    });
+  }
   protected isShiny = signal(false);
   protected loading = signal(false);
   protected pageLoading = signal(false);
@@ -160,6 +184,11 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.intersectionObserver) {
       this.intersectionObserver.disconnect();
+    }
+    const body = this.#document?.body;
+    if (body) {
+      body.classList.remove('modal-open');
+      body.style.removeProperty('overflow');
     }
   }
 

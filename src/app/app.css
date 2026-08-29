@@ -274,13 +274,49 @@ input {
   text-transform: uppercase;
 }
 
+body.modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 #details {
   width: min(100vw - 1.5rem, 760px);
+  max-height: 90vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--panel);
   border: 4px solid var(--outline);
   box-shadow: 10px 10px 0 var(--outline);
   padding: 1rem;
   color: var(--ink);
+
+  /* Modern Standard (Firefox) */
+  scrollbar-width: thin;
+  scrollbar-color: #191919 var(--panel);
+}
+
+/* WebKit / Chromium / Safari Neo-Brutalist Scrollbar */
+#details::-webkit-scrollbar {
+  width: 14px;
+}
+
+#details::-webkit-scrollbar-track {
+  background: var(--panel);
+  border-left: 3px solid var(--outline);
+}
+
+#details::-webkit-scrollbar-thumb {
+  background: #191919;
+  border: 3px solid var(--outline);
+  border-radius: 0;
+}
+
+#details::-webkit-scrollbar-thumb:hover {
+  background: var(--red, #ff5a3c);
+}
+
+#details::-webkit-scrollbar-corner {
+  background: var(--panel);
 }
 
 #details::backdrop {

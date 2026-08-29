@@ -62,6 +62,25 @@
             }
           </div>
 
+          @if (abilities.length > 0) {
+            <div class="pokemon-abilities">
+              <span class="abilities-label">Abilities</span>
+              <div class="ability-pills">
+                @for (ability of abilities; track ability.name) {
+                  <span
+                    class="ability-pill"
+                    [class.ability-pill--hidden]="ability.isHidden"
+                  >
+                    {{ ability.name }}
+                    @if (ability.isHidden) {
+                      <span class="hidden-badge">(Hidden)</span>
+                    }
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
           <div class="pokemon-stats">
             <div class="stat-box">
               <span class="stat-label">Height</span>
@@ -71,9 +90,39 @@
               <span class="stat-label">Weight</span>
               <strong>{{ pokemon?.weight }}kg</strong>
             </div>
+            <div class="stat-box">
+              <span class="stat-label">Base Exp</span>
+              <strong>{{ pokemon?.baseExperience ?? 0 }} exp</strong>
+            </div>
           </div>
 
           <p class="pokemon-description">{{ pokemon?.description }}</p>
+
+          @if (stats.length > 0) {
+            <div class="base-stats-section">
+              <div class="base-stats-header">
+                <h3 class="base-stats-title">Base Stats</h3>
+                <span class="total-stats-badge">Total <strong>{{ totalStats }}</strong></span>
+              </div>
+              <div class="base-stats-list">
+                @for (stat of stats; track stat.name) {
+                  <div class="stat-row">
+                    <span class="stat-row__label">{{ stat.displayName }}</span>
+                    <span class="stat-row__value">{{ stat.baseStat }}</span>
+                    <div class="stat-bar-container">
+                      <div
+                        class="stat-bar-fill stat-bar-fill--{{ stat.name }}"
+                        [style.width.%]="stat.percentage"
+                        [attr.aria-valuenow]="stat.baseStat"
+                        aria-valuemin="0"
+                        aria-valuemax="255"
+                      ></div>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
         </div>
       </div>
     }
