@@ -1,11 +1,11 @@
 <div class="pokedex-app">
   <header class="topbar" aria-label="Pokédex header">
     <div class="brand">
-      <span class="brand__eyebrow">Kanto Region</span>
+      <span class="brand__eyebrow">All Regions</span>
       <h1>Pokédex</h1>
     </div>
     <div class="topbar__meta">
-      <span>Tracked</span>
+      <span>Visible</span>
       <strong>{{ filteredPokemon().length }} entries</strong>
     </div>
   </header>
@@ -20,8 +20,39 @@
           type="search"
           placeholder="Search by name or number..."
           aria-label="Search Pokémon"
+          [value]="searchQuery()"
           (input)="search($event)"
         />
+      </div>
+    </section>
+
+    <section class="type-filters-panel" aria-label="Type filters">
+      <div class="type-filters">
+        <button
+          type="button"
+          class="type-filter-button type-filter-button--all"
+          [class.is-active]="selectedTypes().length === 0"
+          [attr.aria-pressed]="selectedTypes().length === 0"
+          (click)="filterByType('all')"
+        >
+          <span class="type-filter-button__indicator" aria-hidden="true"></span>
+          ALL
+        </button>
+        @for (type of pokemonTypes; track type) {
+          <button
+            type="button"
+            class="type-filter-button"
+            [ngClass]="'type-filter-button--' + type"
+            [class.is-active]="selectedTypes().includes(type)"
+            [class.is-disabled]="isTypeDisabled(type)"
+            [attr.aria-pressed]="selectedTypes().includes(type)"
+            [disabled]="isTypeDisabled(type)"
+            (click)="filterByType(type)"
+          >
+            <span class="type-filter-button__indicator" aria-hidden="true"></span>
+            {{ type | uppercase }}
+          </button>
+        }
       </div>
     </section>
 
@@ -30,6 +61,16 @@
     }
     @if (error()) {
       <p class="status status--error">{{ error() }}</p>
+    }
+
+    @if (filteredPokemon().length === 0 && !loading()) {
+      <div class="empty-state">
+        <p class="empty-state__message">No Pokémon found.</p>
+        <p class="empty-state__hint">Try changing your search or selected type.</p>
+        <button type="button" class="empty-state__button" (click)="clearFilters()">
+          Clear Filters
+        </button>
+      </div>
     }
 
     <section class="pokemon-grid" aria-live="polite" aria-label="Pokémon list">
@@ -41,7 +82,30 @@
           (imageError)="onImageError($event)"
         />
       }
+
+      @if (pageLoading()) {
+        @for (i of [0, 1, 2, 3, 4, 5]; track i) {
+          <div class="pokemon-card pokemon-card--skeleton" aria-hidden="true">
+            <div
+              class="pokemon-card__number skeleton-shimmer"
+              style="width: 2.5rem; height: 1rem"
+            ></div>
+            <div class="pokemon-card__image-wrap skeleton-shimmer"></div>
+            <div class="pokemon-card__footer">
+              <div
+                class="skeleton-shimmer"
+                style="width: 70%; height: 1.2rem; margin-bottom: 0.4rem"
+              ></div>
+              <div class="pokemon-card__types">
+                <div class="type skeleton-shimmer" style="width: 3rem; height: 1.5rem"></div>
+              </div>
+            </div>
+          </div>
+        }
+      }
     </section>
+
+    <div #sentinel class="scroll-sentinel"></div>
   </main>
 </div>
 

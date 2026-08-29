@@ -1,26 +1,67 @@
-import { Component, computed, inject, signal, ViewEncapsulation } from '@angular/core';
+import {
+  Component,
+  computed,
+  inject,
+  signal,
+  ViewEncapsulation,
+  OnInit,
+  OnDestroy,
+  ViewChild,
+  ElementRef,
+  AfterViewInit,
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { PokedexService } from './services/pokedex';
 import { Pokemon } from './models/types';
 import { PokemonCardComponent } from './shared/pokemon-card/pokemon-card';
 import { PokemonDetailsComponent } from './shared/pokemon-details/pokemon-details';
 import { PokemonLoaderComponent } from './shared/pokemon-loader/pokemon-loader';
+import { POKEMON_TYPES } from './models/pokemon-types';
 
 @Component({
   selector: 'app-root',
-  imports: [PokemonCardComponent, PokemonDetailsComponent, PokemonLoaderComponent],
+  imports: [CommonModule, PokemonCardComponent, PokemonDetailsComponent, PokemonLoaderComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
-  encapsulation: ViewEncapsulation.None
+  encapsulation: ViewEncapsulation.None,
 })
-export class App {
+export class App implements OnInit, AfterViewInit, OnDestroy {
   #pokemonService = inject(PokedexService);
   #pokemon = signal<Pokemon[]>([]);
-  protected filteredPokemon = signal<Pokemon[]>([]);
+  protected searchQuery = signal<string>('');
+  protected selectedTypes = signal<string[]>([]);
   protected activePokemon = signal<Pokemon | null>(null);
   protected isShiny = signal(false);
   protected loading = signal(false);
+  protected pageLoading = signal(false);
   protected detailsLoading = signal(false);
   protected error = signal<string | null>(null);
+  protected pokemonTypes = POKEMON_TYPES;
+
+  @ViewChild('sentinel', { static: false }) sentinelRef?: ElementRef<HTMLElement>;
+
+  protected readonly pageSize = 24;
+  private pageOffset = 0;
+  private totalPokemon = 0;
+  private intersectionObserver: IntersectionObserver | null = null;
+
+  protected filteredPokemon = computed(() => {
+    const allPokemon = this.#pokemon();
+    const search = this.searchQuery().toLowerCase();
+    const selectedTypes = this.selectedTypes();
+
+    return allPokemon.filter((pokemon) => {
+      const matchesSearch = !search || pokemon.name.toLowerCase().includes(search);
+      const matchesType =
+        selectedTypes.length === 0 || selectedTypes.every((type) => pokemon.types.includes(type));
+      return matchesSearch && matchesType;
+    });
+  });
+
+  protected hasMore = computed(() => {
+    return this.#pokemon().length < this.totalPokemon;
+  });
+
   protected currentSprite = computed(() => {
     const pokemon = this.activePokemon();
 
@@ -29,7 +70,8 @@ export class App {
     }
 
     const normalSprite = pokemon.sprite ?? '';
-    const selectedSprite = this.isShiny() && pokemon.spriteShiny ? pokemon.spriteShiny : normalSprite;
+    const selectedSprite =
+      this.isShiny() && pokemon.spriteShiny ? pokemon.spriteShiny : normalSprite;
 
     if (!this.failedSpriteUrls().has(selectedSprite)) {
       return selectedSprite;
@@ -55,27 +97,75 @@ export class App {
     this.loading.set(true);
     this.error.set(null);
 
-    this.#pokemonService.getPokedex().subscribe({
-      next: (pokemon) => {
-        this.#pokemon.set(pokemon);
-        this.filteredPokemon.set(pokemon);
+    this.#pokemonService.getPokemonPage(this.pageSize, 0).subscribe({
+      next: (response) => {
+        this.#pokemon.set(response.pokemon);
+        this.totalPokemon = response.total;
+        this.pageOffset = this.pageSize;
       },
       error: () => {
-        this.error.set('Unable to load the Pokémon list right now. Please try again later.');
+        this.error.set('Unable to load Pokémon right now. Please try again later.');
       },
       complete: () => {
         this.loading.set(false);
-      }
+      },
     });
   }
 
-  protected search(event: Event) {
-    const term = (event.target as HTMLInputElement | null)?.value.trim().toLowerCase() ?? '';
-    const filtered = !term
-      ? this.#pokemon()
-      : this.#pokemon().filter((pokemon) => pokemon.name.toLowerCase().includes(term));
+  ngAfterViewInit(): void {
+    this.setupIntersectionObserver();
+  }
 
-    this.filteredPokemon.set(filtered);
+  private setupIntersectionObserver(): void {
+    if (typeof IntersectionObserver === 'undefined' || !this.sentinelRef) {
+      return;
+    }
+
+    this.intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !this.pageLoading() && this.hasMore()) {
+            this.loadNextPage();
+          }
+        });
+      },
+      { rootMargin: '200px' },
+    );
+
+    this.intersectionObserver.observe(this.sentinelRef.nativeElement);
+  }
+
+  private loadNextPage(): void {
+    if (this.pageLoading() || !this.hasMore()) {
+      return;
+    }
+
+    this.pageLoading.set(true);
+    this.error.set(null);
+
+    this.#pokemonService.getPokemonPage(this.pageSize, this.pageOffset).subscribe({
+      next: (response) => {
+        this.#pokemon.update((current) => [...current, ...response.pokemon]);
+        this.pageOffset += response.pokemon.length;
+      },
+      error: () => {
+        this.error.set('Failed to load more Pokémon. Scroll to retry.');
+      },
+      complete: () => {
+        this.pageLoading.set(false);
+      },
+    });
+  }
+
+  ngOnDestroy(): void {
+    if (this.intersectionObserver) {
+      this.intersectionObserver.disconnect();
+    }
+  }
+
+  protected search(event: Event) {
+    const term = (event.target as HTMLInputElement | null)?.value.trim() ?? '';
+    this.searchQuery.set(term);
   }
 
   protected openPokemonDetails(pokemon: Pokemon) {
@@ -105,7 +195,7 @@ export class App {
         this.activePokemon.set(null);
         this.detailsLoading.set(false);
         this.error.set('Unable to load Pokémon details right now.');
-      }
+      },
     });
   }
 
@@ -149,6 +239,34 @@ export class App {
     return url;
   }
 
+  protected filterByType(type: string): void {
+    if (type === 'all') {
+      this.selectedTypes.set([]);
+      return;
+    }
+
+    this.selectedTypes.update((selected) => {
+      const isSelected = selected.includes(type);
+      if (isSelected) {
+        return selected.filter((t) => t !== type);
+      }
+      if (selected.length >= 2) {
+        return selected;
+      }
+      return [...selected, type];
+    });
+  }
+
+  protected isTypeDisabled(type: string): boolean {
+    const selected = this.selectedTypes();
+    return selected.length >= 2 && !selected.includes(type);
+  }
+
+  protected clearFilters(): void {
+    this.searchQuery.set('');
+    this.selectedTypes.set([]);
+  }
+
   private preloadSprite(url: string | null | undefined): void {
     if (!url || this.preloadedSprites.has(url)) {
       return;
@@ -159,4 +277,3 @@ export class App {
     image.src = url;
   }
 }
-

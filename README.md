@@ -1,15 +1,18 @@
 # Angular Pokédex
 
-A responsive Kanto-region Pokédex built with Angular 20. It loads the original 151 Pokémon from [PokeAPI](https://pokeapi.co/), provides local name filtering, and opens a detailed view with normal and shiny sprites.
+A responsive full Pokédex built with Angular 20. It loads Pokémon from [PokeAPI](https://pokeapi.co/) using efficient pagination and infinite scroll, provides local name filtering and type filtering, and opens a detailed view with normal and shiny sprites.
 
 ## Features
 
-- Lists all 151 Kanto Pokédex entries with numbered cards
+- Lists all Pokémon from the PokeAPI with numbered cards
+- Loads Pokémon efficiently using pagination (24 per page) with infinite scroll
 - Displays Pokémon sprites and type badges with type-specific colors
 - Filters the list by name while typing
+- Filters the list by Pokémon type (supports selecting up to 2 types simultaneously with AND logic)
 - Opens details in a native popover dialog
 - Shows types, height, weight, and species descriptions
 - Toggles reliably between normal and shiny sprites
+- Shows skeleton loaders while fetching new pages
 - Shows a detail skeleton and Poké Ball loader during API requests
 - Shows a sprite loader while normal or shiny images load
 - Falls back safely when an image or shiny sprite is unavailable
