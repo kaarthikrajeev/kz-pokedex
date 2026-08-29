@@ -31,6 +31,18 @@
         <div class="pokemon-details__figure">
           <button
             type="button"
+            class="pokemon-favorite-toggle"
+            [class.pokemon-favorite-toggle--active]="isFavorite"
+            [attr.aria-label]="isFavorite ? 'Remove ' + pokemon?.name + ' from favorites' : 'Add ' + pokemon?.name + ' to favorites'"
+            [attr.aria-pressed]="isFavorite"
+            [title]="isFavorite ? 'Remove from favorites' : 'Add to favorites'"
+            (click)="toggleFavorite($event)"
+          >
+            {{ isFavorite ? '★' : '☆' }}
+          </button>
+
+          <button
+            type="button"
             class="pokemon-shiny-toggle"
             [class.pokemon-shiny-toggle--active]="shiny"
             [attr.aria-label]="shiny ? 'Show normal Pokemon' : 'Show shiny Pokemon'"
@@ -58,7 +70,7 @@
         <div class="pokemon-details__meta">
           <div class="pokemon-types">
             @for (type of pokemon?.types; track type) {
-              <span class="type {{ type }}">{{ type }}</span>
+              <span class="type {{ sanitizeType(type) }}">{{ type }}</span>
             }
           </div>
 
@@ -111,7 +123,7 @@
                     <span class="stat-row__value">{{ stat.baseStat }}</span>
                     <div class="stat-bar-container">
                       <div
-                        class="stat-bar-fill stat-bar-fill--{{ stat.name }}"
+                        class="stat-bar-fill stat-bar-fill--{{ sanitizeStat(stat.name) }}"
                         [style.width.%]="stat.percentage"
                         [attr.aria-valuenow]="stat.baseStat"
                         aria-valuemin="0"

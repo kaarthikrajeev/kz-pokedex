@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of, forkJoin, throwError } from 'rxjs';
 import { map, catchError, switchMap, shareReplay } from 'rxjs/operators';
 import { Pokemon, PokemonAbility, PokemonStat } from '../models/types';
+import { sanitizePokemonType, sanitizeStatName, VALID_STAT_NAMES } from '../models/pokemon-types';
 
 const POKE_API_BASE_URL = 'https://pokeapi.co/api/v2';
 const POKEMON_SPRITE_BASE_URL =
@@ -70,7 +71,7 @@ export class PokedexService {
               map((details) => ({
                 ...pokemon,
                 types: Array.isArray(details?.types)
-                  ? details.types.map((entry: any) => entry.type?.name).filter(Boolean)
+                  ? details.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
                   : [],
               })),
               catchError(() => of(pokemon)),
@@ -130,7 +131,7 @@ export class PokedexService {
               map((details) => ({
                 ...pokemon,
                 types: Array.isArray(details?.types)
-                  ? details.types.map((entry: any) => entry.type?.name).filter(Boolean)
+                  ? details.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
                   : [],
               })),
               catchError(() => of(pokemon)),
@@ -270,7 +271,7 @@ export class PokedexService {
 
   private mapPokemonDetails(pokemon: any, species: any): Pokemon {
     const types = Array.isArray(pokemon?.types)
-      ? pokemon.types.map((entry: any) => entry.type?.name).filter(Boolean)
+      ? pokemon.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
       : [];
 
     const baseExperience = Number(pokemon?.base_experience ?? 0);
@@ -284,26 +285,20 @@ export class PokedexService {
           .filter((a: PokemonAbility) => Boolean(a.name))
       : [];
 
-    const statLabels: Record<string, string> = {
-      hp: 'HP',
-      attack: 'ATK',
-      defense: 'DEF',
-      'special-attack': 'SP. ATK',
-      'special-defense': 'SP. DEF',
-      speed: 'SPEED',
-    };
+    const statLabels: Record<string, string> = VALID_STAT_NAMES;
 
     const rawStats = Array.isArray(pokemon?.stats) ? pokemon.stats : [];
     let totalStats = 0;
 
     const stats: PokemonStat[] = Object.keys(statLabels).map((statKey) => {
-      const found = rawStats.find((s: any) => s.stat?.name === statKey);
+      const sanitizedKey = sanitizeStatName(statKey);
+      const found = rawStats.find((s: any) => sanitizeStatName(s.stat?.name) === sanitizedKey);
       const baseStat = Number(found?.base_stat ?? 0);
       totalStats += baseStat;
       const percentage = Math.min(100, Math.round((baseStat / 255) * 100));
 
       return {
-        name: statKey,
+        name: sanitizedKey,
         displayName: statLabels[statKey],
         baseStat,
         percentage,

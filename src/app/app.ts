@@ -13,12 +13,12 @@ import {
 } from '@angular/core';
 import { CommonModule, DOCUMENT } from '@angular/common';
 import { PokedexService } from './services/pokedex';
+import { FavoritesService } from './services/favorites';
 import { Pokemon } from './models/types';
 import { PokemonCardComponent } from './shared/pokemon-card/pokemon-card';
 import { PokemonDetailsComponent } from './shared/pokemon-details/pokemon-details';
 import { PokemonLoaderComponent } from './shared/pokemon-loader/pokemon-loader';
-import { POKEMON_TYPES } from './models/pokemon-types';
-
+import { POKEMON_TYPES, sanitizePokemonType } from './models/pokemon-types';
 @Component({
   selector: 'app-root',
   imports: [CommonModule, PokemonCardComponent, PokemonDetailsComponent, PokemonLoaderComponent],
@@ -29,9 +29,11 @@ import { POKEMON_TYPES } from './models/pokemon-types';
 export class App implements OnInit, AfterViewInit, OnDestroy {
   readonly #document = inject(DOCUMENT);
   #pokemonService = inject(PokedexService);
-  #pokemon = signal<Pokemon[]>([]);
+  #favoritesService = inject(FavoritesService);
+  protected pokemon = signal<Pokemon[]>([]);
   protected searchQuery = signal<string>('');
   protected selectedTypes = signal<string[]>([]);
+  protected showFavoritesOnly = signal<boolean>(false);
   protected activePokemon = signal<Pokemon | null>(null);
 
   constructor() {
@@ -61,6 +63,8 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   protected detailsLoading = signal(false);
   protected error = signal<string | null>(null);
   protected pokemonTypes = POKEMON_TYPES;
+  protected readonly favorites = this.#favoritesService.favorites;
+  protected readonly sanitizeType = sanitizePokemonType;
 
   @ViewChild('sentinel', { static: false }) sentinelRef?: ElementRef<HTMLElement>;
 
@@ -70,20 +74,36 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   private intersectionObserver: IntersectionObserver | null = null;
 
   protected filteredPokemon = computed(() => {
-    const allPokemon = this.#pokemon();
+    const allPokemon = this.pokemon();
     const search = this.searchQuery().toLowerCase();
     const selectedTypes = this.selectedTypes();
+    const favSet = this.#favoritesService.favorites();
+    const favoritesOnly = this.showFavoritesOnly();
 
-    return allPokemon.filter((pokemon) => {
+    const filtered = allPokemon.filter((pokemon) => {
+      if (favoritesOnly && !favSet.has(pokemon.id)) {
+        return false;
+      }
       const matchesSearch = !search || pokemon.name.toLowerCase().includes(search);
       const matchesType =
         selectedTypes.length === 0 || selectedTypes.every((type) => pokemon.types.includes(type));
       return matchesSearch && matchesType;
     });
+
+    return [...filtered].sort((a, b) => {
+      const aFav = favSet.has(a.id);
+      const bFav = favSet.has(b.id);
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+      return a.id - b.id;
+    });
   });
 
   protected hasMore = computed(() => {
-    return this.#pokemon().length < this.totalPokemon;
+    if (this.showFavoritesOnly()) {
+      return false;
+    }
+    return this.pokemon().length < this.totalPokemon;
   });
 
   protected currentSprite = computed(() => {
@@ -123,7 +143,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
 
     this.#pokemonService.getPokemonPage(this.pageSize, 0).subscribe({
       next: (response) => {
-        this.#pokemon.set(response.pokemon);
+        this.pokemon.set(response.pokemon);
         this.totalPokemon = response.total;
         this.pageOffset = this.pageSize;
       },
@@ -169,7 +189,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
 
     this.#pokemonService.getPokemonPage(this.pageSize, this.pageOffset).subscribe({
       next: (response) => {
-        this.#pokemon.update((current) => [...current, ...response.pokemon]);
+        this.pokemon.update((current) => [...current, ...response.pokemon]);
         this.pageOffset += response.pokemon.length;
       },
       error: () => {
@@ -198,6 +218,15 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected openPokemonDetails(pokemon: Pokemon) {
+    const dialog = this.#document.getElementById('details') as HTMLDialogElement | null;
+    if (dialog && !dialog.matches(':popover-open')) {
+      try {
+        dialog.showPopover();
+      } catch (e) {
+        console.warn('Popover API not fully supported or already open', e);
+      }
+    }
+
     const requestId = ++this.detailRequestId;
     this.detailsLoading.set(true);
     this.error.set(null);
@@ -291,9 +320,14 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     return selected.length >= 2 && !selected.includes(type);
   }
 
+  protected toggleFavoritesFilter(): void {
+    this.showFavoritesOnly.update((value) => !value);
+  }
+
   protected clearFilters(): void {
     this.searchQuery.set('');
     this.selectedTypes.set([]);
+    this.showFavoritesOnly.set(false);
   }
 
   private preloadSprite(url: string | null | undefined): void {

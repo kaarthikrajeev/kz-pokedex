@@ -1,5 +1,26 @@
-<button class="pokemon-card" type="button" popovertarget="details" (click)="selected.emit(pokemon)">
-  <span class="pokemon-card__number">#{{ formatNumber(pokemon.id) }}</span>
+<article
+  class="pokemon-card"
+  role="button"
+  tabindex="0"
+  (click)="selected.emit(pokemon)"
+  (keydown.enter)="selected.emit(pokemon)"
+  (keydown.space)="selected.emit(pokemon); $event.preventDefault()"
+>
+  <div class="pokemon-card__header">
+    <span class="pokemon-card__number">#{{ formatNumber(pokemon.id) }}</span>
+    <button
+      type="button"
+      class="pokemon-card__favorite-toggle"
+      [class.pokemon-card__favorite-toggle--active]="isFavorite"
+      [attr.aria-label]="isFavorite ? 'Remove ' + pokemon.name + ' from favorites' : 'Add ' + pokemon.name + ' to favorites'"
+      [attr.aria-pressed]="isFavorite"
+      [title]="isFavorite ? 'Remove from favorites' : 'Add to favorites'"
+      (click)="toggleFavorite($event)"
+      (keydown)="$event.stopPropagation()"
+    >
+      {{ isFavorite ? '★' : '☆' }}
+    </button>
+  </div>
 
   <div class="pokemon-card__image-wrap">
     @if (sprite) {
@@ -17,4 +38,4 @@
       }
     </div>
   </div>
-</button>
+</article>

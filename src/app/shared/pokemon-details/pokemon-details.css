@@ -1,11 +1,54 @@
-/* Neo-Brutalist Component Styling for Pokemon Details */
-
 :host {
   display: block;
 }
 
 .pokemon-details {
   overscroll-behavior: contain;
+}
+
+.pokemon-favorite-toggle {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.55rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 3px solid var(--outline, #000);
+  background: #fbfaf7;
+  box-shadow: 3px 3px 0 var(--outline, #000);
+  color: var(--ink, #111);
+  font-size: 1.15rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.pokemon-favorite-toggle:hover,
+.pokemon-favorite-toggle:focus-visible {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--outline, #000);
+}
+
+.pokemon-favorite-toggle:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--outline, #000);
+}
+
+.pokemon-favorite-toggle--active {
+  background: #ffd000;
+  color: #000;
+}
+
+.pokemon-favorite-toggle:focus-visible {
+  outline: 3px solid #7ad7ff;
+  outline-offset: 2px;
 }
 
 .pokemon-abilities {
