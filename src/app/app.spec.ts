@@ -61,14 +61,14 @@ describe('App', () => {
     favoritesService.clearFavorites();
     favoritesService.toggleFavorite(25);
 
-    app.pokemon.set([
+    app.state.pokemon.set([
       { id: 1, name: 'bulbasaur', types: ['grass'], height: 0.7, weight: 6.9, sprite: null },
       { id: 4, name: 'charmander', types: ['fire'], height: 0.6, weight: 8.5, sprite: null },
       { id: 25, name: 'pikachu', types: ['electric'], height: 0.4, weight: 6, sprite: null },
     ]);
     fixture.detectChanges();
 
-    const roster = app.filteredPokemon();
+    const roster = app.state.filteredPokemon();
     expect(roster.map((p: any) => p.id)).toEqual([25, 1, 4]);
   });
 
@@ -81,16 +81,16 @@ describe('App', () => {
     favoritesService.clearFavorites();
     favoritesService.toggleFavorite(4);
 
-    app.pokemon.set([
+    app.state.pokemon.set([
       { id: 1, name: 'bulbasaur', types: ['grass'], height: 0.7, weight: 6.9, sprite: null },
       { id: 4, name: 'charmander', types: ['fire'], height: 0.6, weight: 8.5, sprite: null },
       { id: 7, name: 'squirtle', types: ['water'], height: 0.5, weight: 9, sprite: null },
     ]);
 
-    app.showFavoritesOnly.set(true);
+    app.state.showFavoritesOnly.set(true);
     fixture.detectChanges();
 
-    const roster = app.filteredPokemon();
+    const roster = app.state.filteredPokemon();
     expect(roster.length).toBe(1);
     expect(roster[0].name).toBe('charmander');
   });

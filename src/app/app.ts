@@ -14,11 +14,13 @@ import {
 import { CommonModule, DOCUMENT } from '@angular/common';
 import { PokedexService } from './services/pokedex';
 import { FavoritesService } from './services/favorites';
+import { PokemonListStateService } from './services/pokemon-list-state';
 import { Pokemon } from './models/types';
 import { PokemonCardComponent } from './shared/pokemon-card/pokemon-card';
 import { PokemonDetailsComponent } from './shared/pokemon-details/pokemon-details';
 import { PokemonLoaderComponent } from './shared/pokemon-loader/pokemon-loader';
 import { POKEMON_TYPES, sanitizePokemonType } from './models/pokemon-types';
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule, PokemonCardComponent, PokemonDetailsComponent, PokemonLoaderComponent],
@@ -28,83 +30,22 @@ import { POKEMON_TYPES, sanitizePokemonType } from './models/pokemon-types';
 })
 export class App implements OnInit, AfterViewInit, OnDestroy {
   readonly #document = inject(DOCUMENT);
-  #pokemonService = inject(PokedexService);
-  #favoritesService = inject(FavoritesService);
-  protected pokemon = signal<Pokemon[]>([]);
-  protected searchQuery = signal<string>('');
-  protected selectedTypes = signal<string[]>([]);
-  protected showFavoritesOnly = signal<boolean>(false);
+  readonly #pokemonService = inject(PokedexService);
+  protected readonly state = inject(PokemonListStateService);
+  protected readonly favoritesService = inject(FavoritesService);
+
   protected activePokemon = signal<Pokemon | null>(null);
-
-  constructor() {
-    effect((onCleanup) => {
-      const isOpen = Boolean(this.activePokemon());
-      const body = this.#document?.body;
-      if (body) {
-        body.classList.toggle('modal-open', isOpen);
-        if (isOpen) {
-          body.style.overflow = 'hidden';
-        } else {
-          body.style.removeProperty('overflow');
-        }
-      }
-
-      onCleanup(() => {
-        if (body) {
-          body.classList.remove('modal-open');
-          body.style.removeProperty('overflow');
-        }
-      });
-    });
-  }
   protected isShiny = signal(false);
-  protected loading = signal(false);
-  protected pageLoading = signal(false);
   protected detailsLoading = signal(false);
   protected error = signal<string | null>(null);
+
   protected pokemonTypes = POKEMON_TYPES;
-  protected readonly favorites = this.#favoritesService.favorites;
+  protected readonly favorites = this.favoritesService.favorites;
   protected readonly sanitizeType = sanitizePokemonType;
 
   @ViewChild('sentinel', { static: false }) sentinelRef?: ElementRef<HTMLElement>;
 
-  protected readonly pageSize = 24;
-  private pageOffset = 0;
-  private totalPokemon = 0;
   private intersectionObserver: IntersectionObserver | null = null;
-
-  protected filteredPokemon = computed(() => {
-    const allPokemon = this.pokemon();
-    const search = this.searchQuery().toLowerCase();
-    const selectedTypes = this.selectedTypes();
-    const favSet = this.#favoritesService.favorites();
-    const favoritesOnly = this.showFavoritesOnly();
-
-    const filtered = allPokemon.filter((pokemon) => {
-      if (favoritesOnly && !favSet.has(pokemon.id)) {
-        return false;
-      }
-      const matchesSearch = !search || pokemon.name.toLowerCase().includes(search);
-      const matchesType =
-        selectedTypes.length === 0 || selectedTypes.every((type) => pokemon.types.includes(type));
-      return matchesSearch && matchesType;
-    });
-
-    return [...filtered].sort((a, b) => {
-      const aFav = favSet.has(a.id);
-      const bFav = favSet.has(b.id);
-      if (aFav && !bFav) return -1;
-      if (!aFav && bFav) return 1;
-      return a.id - b.id;
-    });
-  });
-
-  protected hasMore = computed(() => {
-    if (this.showFavoritesOnly()) {
-      return false;
-    }
-    return this.pokemon().length < this.totalPokemon;
-  });
 
   protected currentSprite = computed(() => {
     const pokemon = this.activePokemon();
@@ -137,23 +78,30 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     </svg>
   `)}`;
 
-  ngOnInit() {
-    this.loading.set(true);
-    this.error.set(null);
+  constructor() {
+    effect((onCleanup) => {
+      const isOpen = Boolean(this.activePokemon());
+      const body = this.#document?.body;
+      if (body) {
+        body.classList.toggle('modal-open', isOpen);
+        if (isOpen) {
+          body.style.overflow = 'hidden';
+        } else {
+          body.style.removeProperty('overflow');
+        }
+      }
 
-    this.#pokemonService.getPokemonPage(this.pageSize, 0).subscribe({
-      next: (response) => {
-        this.pokemon.set(response.pokemon);
-        this.totalPokemon = response.total;
-        this.pageOffset = this.pageSize;
-      },
-      error: () => {
-        this.error.set('Unable to load Pokémon right now. Please try again later.');
-      },
-      complete: () => {
-        this.loading.set(false);
-      },
+      onCleanup(() => {
+        if (body) {
+          body.classList.remove('modal-open');
+          body.style.removeProperty('overflow');
+        }
+      });
     });
+  }
+
+  ngOnInit() {
+    this.state.loadInitialPage();
   }
 
   ngAfterViewInit(): void {
@@ -168,8 +116,8 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     this.intersectionObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && !this.pageLoading() && this.hasMore()) {
-            this.loadNextPage();
+          if (entry.isIntersecting && !this.state.pageLoading() && this.state.hasMore()) {
+            this.state.loadNextPage();
           }
         });
       },
@@ -177,28 +125,6 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     );
 
     this.intersectionObserver.observe(this.sentinelRef.nativeElement);
-  }
-
-  private loadNextPage(): void {
-    if (this.pageLoading() || !this.hasMore()) {
-      return;
-    }
-
-    this.pageLoading.set(true);
-    this.error.set(null);
-
-    this.#pokemonService.getPokemonPage(this.pageSize, this.pageOffset).subscribe({
-      next: (response) => {
-        this.pokemon.update((current) => [...current, ...response.pokemon]);
-        this.pageOffset += response.pokemon.length;
-      },
-      error: () => {
-        this.error.set('Failed to load more Pokémon. Scroll to retry.');
-      },
-      complete: () => {
-        this.pageLoading.set(false);
-      },
-    });
   }
 
   ngOnDestroy(): void {
@@ -210,11 +136,6 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       body.classList.remove('modal-open');
       body.style.removeProperty('overflow');
     }
-  }
-
-  protected search(event: Event) {
-    const term = (event.target as HTMLInputElement | null)?.value.trim() ?? '';
-    this.searchQuery.set(term);
   }
 
   protected openPokemonDetails(pokemon: Pokemon) {
@@ -234,7 +155,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       this.isShiny.set(false);
     }
 
-    this.#pokemonService.getPokemonDetails(pokemon.name).subscribe({
+    this.#pokemonService.getPokemonDetails(pokemon.id).subscribe({
       next: (pokemonDetails) => {
         if (requestId !== this.detailRequestId) {
           return;
@@ -295,39 +216,6 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     }
 
     return url;
-  }
-
-  protected filterByType(type: string): void {
-    if (type === 'all') {
-      this.selectedTypes.set([]);
-      return;
-    }
-
-    this.selectedTypes.update((selected) => {
-      const isSelected = selected.includes(type);
-      if (isSelected) {
-        return selected.filter((t) => t !== type);
-      }
-      if (selected.length >= 2) {
-        return selected;
-      }
-      return [...selected, type];
-    });
-  }
-
-  protected isTypeDisabled(type: string): boolean {
-    const selected = this.selectedTypes();
-    return selected.length >= 2 && !selected.includes(type);
-  }
-
-  protected toggleFavoritesFilter(): void {
-    this.showFavoritesOnly.update((value) => !value);
-  }
-
-  protected clearFilters(): void {
-    this.searchQuery.set('');
-    this.selectedTypes.set([]);
-    this.showFavoritesOnly.set(false);
   }
 
   private preloadSprite(url: string | null | undefined): void {

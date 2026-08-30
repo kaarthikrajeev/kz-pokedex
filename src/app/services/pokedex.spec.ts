@@ -102,7 +102,7 @@ describe('PokedexService', () => {
       weight: 60,
     });
 
-    const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/pikachu');
+    const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/25');
     speciesReq.flush({
       flavor_text_entries: [{ language: { name: 'en' }, flavor_text: 'Electric mouse.' }],
     });
@@ -161,7 +161,7 @@ describe('PokedexService', () => {
       },
     });
 
-    const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/pikachu');
+    const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/25');
     speciesReq.flush({
       flavor_text_entries: [
         {
@@ -180,7 +180,6 @@ describe('PokedexService', () => {
     service.getPokemonDetails('pikachu').subscribe((res) => (result2 = res));
 
     const pokemonReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/pikachu');
-    const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/pikachu');
 
     pokemonReq.flush({
       id: 25,
@@ -191,6 +190,7 @@ describe('PokedexService', () => {
       sprites: { front_default: 'pikachu.png' },
     });
 
+    const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/25');
     speciesReq.flush({
       flavor_text_entries: [{ language: { name: 'en' }, flavor_text: 'Electric mouse.' }],
     });
