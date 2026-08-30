@@ -8,9 +8,10 @@
 
 *   📖 **Complete Roster:** Lists all Pokémon from the PokeAPI with numbered cards.
 *   🔄 **Infinite Scroll:** Loads Pokémon efficiently using pagination (24 per page).
+*   📊 **Total Count Tracking:** Displays the total number of Pokémon available from PokeAPI (reusing pagination metadata to avoid unnecessary requests), alongside the currently visible filtered Pokémon count.
 *   🎨 **Vibrant UI:** Displays Pokémon sprites and type badges with type-specific colors.
 *   🔍 **Smart Search:** Filters the list by name in real-time while typing.
-*   🧬 **Advanced Filtering:** Filters by Pokémon type (supports selecting up to 2 types simultaneously with AND logic).
+*   🧬 **Advanced Filtering:** Filters by Pokémon type (supports selecting up to 2 types simultaneously with AND logic) and favorites.
 *   📱 **Native Popovers:** Opens details in a native dialog element.
 *   📏 **Detailed Stats:** Shows types, height, weight, and species descriptions.
 *   🌟 **Shiny Toggle:** Switches reliably between normal and shiny sprites.
@@ -45,16 +46,14 @@ Equip your dependencies:
 npm install
 
 🏛️ Architecture
-App owns the page-level state and coordinates the service like a true Pokémon Trainer:
+App coordinates the detailed view state and delegates list orchestration to `PokemonListStateService`:
 
 Plaintext
 PokeAPI
-  -> PokedexService
-  -> cached Pokemon detail data
-  -> activePokemon signal
-  -> isShiny signal
-  -> currentSprite computed signal
-  -> detail image
+  -> PokedexService (caching, deduplication, HTTP logic)
+  -> PokemonListStateService (search, pagination, filters)
+  -> App Component (modal state, orchestrator)
+  -> Standalone UI Components
 The UI is split into standalone components:
 
 🎴 PokemonCardComponent: Renders one list entry and emits selection events.

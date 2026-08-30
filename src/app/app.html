@@ -4,9 +4,15 @@
       <span class="brand__eyebrow">All Regions</span>
       <h1>Pokédex</h1>
     </div>
-    <div class="topbar__meta">
-      <span>Visible</span>
-      <strong>{{ filteredPokemon().length }} entries</strong>
+    <div class="topbar__stats">
+      <div class="topbar__meta">
+        <span>Total</span>
+        <strong>{{ state.totalPokemonCount() }} Pokémon</strong>
+      </div>
+      <div class="topbar__meta">
+        <span>Visible</span>
+        <strong>{{ state.filteredPokemon().length }} entries</strong>
+      </div>
     </div>
   </header>
 
@@ -20,8 +26,8 @@
           type="search"
           placeholder="Search by name or number..."
           aria-label="Search Pokémon"
-          [value]="searchQuery()"
-          (input)="search($event)"
+          [value]="state.searchQuery()"
+          (input)="state.search($any($event.target).value)"
         />
       </div>
     </section>
@@ -31,9 +37,9 @@
         <button
           type="button"
           class="type-filter-button type-filter-button--favorites"
-          [class.is-active]="showFavoritesOnly()"
-          [attr.aria-pressed]="showFavoritesOnly()"
-          (click)="toggleFavoritesFilter()"
+          [class.is-active]="state.showFavoritesOnly()"
+          [attr.aria-pressed]="state.showFavoritesOnly()"
+          (click)="state.toggleFavoritesFilter()"
         >
           <span class="type-filter-button__star" aria-hidden="true">★</span>
           FAVORITES ({{ favorites().size }})
@@ -42,9 +48,9 @@
         <button
           type="button"
           class="type-filter-button type-filter-button--all"
-          [class.is-active]="selectedTypes().length === 0 && !showFavoritesOnly()"
-          [attr.aria-pressed]="selectedTypes().length === 0 && !showFavoritesOnly()"
-          (click)="filterByType('all')"
+          [class.is-active]="state.selectedTypes().length === 0 && !state.showFavoritesOnly()"
+          [attr.aria-pressed]="state.selectedTypes().length === 0 && !state.showFavoritesOnly()"
+          (click)="state.filterByType('all')"
         >
           <span class="type-filter-button__indicator" aria-hidden="true"></span>
           ALL
@@ -54,11 +60,11 @@
             type="button"
             class="type-filter-button"
             [ngClass]="'type-filter-button--' + sanitizeType(type)"
-            [class.is-active]="selectedTypes().includes(type)"
-            [class.is-disabled]="isTypeDisabled(type)"
-            [attr.aria-pressed]="selectedTypes().includes(type)"
-            [disabled]="isTypeDisabled(type)"
-            (click)="filterByType(type)"
+            [class.is-active]="state.selectedTypes().includes(type)"
+            [class.is-disabled]="state.isTypeDisabled(type)"
+            [attr.aria-pressed]="state.selectedTypes().includes(type)"
+            [disabled]="state.isTypeDisabled(type)"
+            (click)="state.filterByType(type)"
           >
             <span class="type-filter-button__indicator" aria-hidden="true"></span>
             {{ type | uppercase }}
@@ -67,29 +73,29 @@
       </div>
     </section>
 
-    @if (loading()) {
+    @if (state.loading()) {
       <app-pokemon-loader message="Loading Pokémon..." />
     }
-    @if (error()) {
-      <p class="status status--error">{{ error() }}</p>
+    @if (state.error() || error()) {
+      <p class="status status--error">{{ state.error() || error() }}</p>
     }
 
-    @if (filteredPokemon().length === 0 && !loading()) {
+    @if (state.filteredPokemon().length === 0 && !state.loading()) {
       <div class="empty-state">
         <p class="empty-state__message">
-          {{ showFavoritesOnly() ? 'No favorite Pokémon found.' : 'No Pokémon found.' }}
+          {{ state.showFavoritesOnly() ? 'No favorite Pokémon found.' : 'No Pokémon found.' }}
         </p>
         <p class="empty-state__hint">
-          {{ showFavoritesOnly() ? 'Click the star icon (★) on any Pokémon card to add it to your favorites.' : 'Try changing your search or selected type.' }}
+          {{ state.showFavoritesOnly() ? 'Click the star icon (★) on any Pokémon card to add it to your favorites.' : 'Try changing your search or selected type.' }}
         </p>
-        <button type="button" class="empty-state__button" (click)="clearFilters()">
+        <button type="button" class="empty-state__button" (click)="state.clearFilters()">
           Clear Filters
         </button>
       </div>
     }
 
     <section class="pokemon-grid" aria-live="polite" aria-label="Pokémon list">
-      @for (pokemon of filteredPokemon(); track pokemon.id) {
+      @for (pokemon of state.filteredPokemon(); track pokemon.id) {
         <app-pokemon-card
           [pokemon]="pokemon"
           [sprite]="spriteUrl(pokemon.sprite)"
@@ -98,7 +104,7 @@
         />
       }
 
-      @if (pageLoading() && !showFavoritesOnly()) {
+      @if (state.pageLoading() && !state.showFavoritesOnly()) {
         @for (i of [0, 1, 2, 3, 4, 5]; track i) {
           <div class="pokemon-card pokemon-card--skeleton" aria-hidden="true">
             <div
@@ -124,7 +130,7 @@
   </main>
 </div>
 
-<dialog id="details" popover (toggle)="onDetailsToggle($event)">
+<dialog id="details" class="neo-scrollbar" popover (toggle)="onDetailsToggle($event)">
   <button
     class="dialog-close"
     popovertarget="details"

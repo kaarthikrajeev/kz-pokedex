@@ -2,7 +2,7 @@ import { Injectable, signal, Signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, forkJoin, throwError } from 'rxjs';
 import { map, catchError, switchMap, shareReplay } from 'rxjs/operators';
-import { Pokemon, PokemonAbility, PokemonStat } from '../models/types';
+import { Pokemon, PokemonAbility, PokemonStat, PaginatedResponse, NamedAPIResource } from '../models/types';
 import { sanitizePokemonType, sanitizeStatName, VALID_STAT_NAMES } from '../models/pokemon-types';
 
 const POKE_API_BASE_URL = 'https://pokeapi.co/api/v2';
@@ -25,14 +25,14 @@ export class PokedexService {
     limit: number,
     offset: number,
   ): Observable<{ pokemon: Pokemon[]; total: number; hasMore: boolean }> {
-    return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon?limit=${limit}&offset=${offset}`).pipe(
+    return this.http.get<PaginatedResponse<NamedAPIResource>>(`${POKE_API_BASE_URL}/pokemon?limit=${limit}&offset=${offset}`).pipe(
       map((response): { pokemon: Pokemon[]; total: number } => {
         const results = Array.isArray(response?.results) ? response.results : [];
         const total = Number(response?.count ?? 0);
 
         return {
           pokemon: results
-            .map((entry: any) => {
+            .map((entry): Pokemon | null => {
               const name = String(entry.name ?? '').trim();
               const url = String(entry.url ?? '').trim();
               const id = this.extractIdFromUrl(url);
@@ -50,96 +50,22 @@ export class PokedexService {
                 sprite: this.getSpriteUrl(id),
                 spriteShiny: this.getShinySpriteUrl(id),
                 description: '',
-              } satisfies Pokemon;
+              };
             })
-            .filter((pokemon: any): pokemon is Pokemon => Boolean(pokemon)),
+            .filter((pokemon): pokemon is Pokemon => pokemon !== null),
           total,
         };
       }),
       switchMap(({ pokemon: pokemonList, total }) =>
-        forkJoin(
-          pokemonList.map((pokemon) => {
-            const cached = this.pokemonCache().get(String(pokemon.id));
-            if (cached && cached.types && cached.types.length > 0) {
-              return of({
-                ...pokemon,
-                types: cached.types,
-              });
-            }
-
-            return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
-              map((details) => ({
-                ...pokemon,
-                types: Array.isArray(details?.types)
-                  ? details.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
-                  : [],
-              })),
-              catchError(() => of(pokemon)),
-            );
-          }),
-        ).pipe(
+        this.hydratePokemonTypes(pokemonList).pipe(
           map((pokemonWithTypes) => ({
             pokemon: pokemonWithTypes,
             total,
             hasMore: offset + pokemonList.length < total,
           })),
-        ),
+        )
       ),
       catchError(() => throwError(() => new Error('Unable to load Pokémon page.'))),
-    );
-  }
-
-  getPokedex(): Observable<Pokemon[]> {
-    return this.http.get<any>(`${POKE_API_BASE_URL}/pokedex/kanto`).pipe(
-      map((response): Pokemon[] => {
-        const entries = response?.pokemon_entries ?? [];
-
-        return entries
-          .map((entry: any) => {
-            const id = Number(entry.entry_number ?? 0);
-            const name = String(entry.pokemon_species?.name ?? '').trim();
-
-            if (!id || !name) {
-              return null;
-            }
-
-            return {
-              id,
-              name,
-              types: [],
-              height: 0,
-              weight: 0,
-              sprite: this.getSpriteUrl(id),
-              spriteShiny: this.getShinySpriteUrl(id),
-              description: '',
-            } satisfies Pokemon;
-          })
-          .filter((pokemon: any): pokemon is Pokemon => Boolean(pokemon));
-      }),
-      switchMap((pokemonList: Pokemon[]) =>
-        forkJoin(
-          pokemonList.map((pokemon) => {
-            const cached = this.pokemonCache().get(String(pokemon.id));
-            if (cached && cached.types && cached.types.length > 0) {
-              return of({
-                ...pokemon,
-                types: cached.types,
-              });
-            }
-
-            return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
-              map((details) => ({
-                ...pokemon,
-                types: Array.isArray(details?.types)
-                  ? details.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
-                  : [],
-              })),
-              catchError(() => of(pokemon)),
-            );
-          }),
-        ),
-      ),
-      catchError(() => throwError(() => new Error('Unable to load the Pokémon list right now.'))),
     );
   }
 
@@ -157,10 +83,18 @@ export class PokedexService {
       return cachedRequest;
     }
 
-    const request = forkJoin({
-      pokemon: this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${nameOrId}`),
-      species: this.http.get<any>(`${POKE_API_BASE_URL}/pokemon-species/${nameOrId}`),
-    }).pipe(
+    const request = this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${nameOrId}`).pipe(
+      switchMap(pokemon => {
+        const speciesUrl = pokemon?.species?.url;
+        const speciesReq = speciesUrl 
+          ? this.http.get<any>(speciesUrl)
+          : this.http.get<any>(`${POKE_API_BASE_URL}/pokemon-species/${pokemon.id}`);
+          
+        return speciesReq.pipe(
+          map(species => ({ pokemon, species })),
+          catchError(() => of({ pokemon, species: null }))
+        );
+      }),
       map(({ pokemon, species }) => {
         const mappedPokemon = this.mapPokemonDetails(pokemon, species);
         this.savePokemonToCache(mappedPokemon);
@@ -178,6 +112,98 @@ export class PokedexService {
     return request;
   }
 
+  private searchIndex: { id: number; name: string }[] | null = null;
+  private searchIndexRequest: Observable<{ id: number; name: string }[]> | null = null;
+
+  getSearchIndex(): Observable<{ id: number; name: string }[]> {
+    if (this.searchIndex) return of(this.searchIndex);
+    if (this.searchIndexRequest) return this.searchIndexRequest;
+    
+    this.searchIndexRequest = this.http.get<PaginatedResponse<NamedAPIResource>>(`${POKE_API_BASE_URL}/pokemon?limit=100000`).pipe(
+      map((response): { id: number; name: string }[] => {
+        const results = Array.isArray(response?.results) ? response.results : [];
+        const index = results.map((entry) => ({
+          id: this.extractIdFromUrl(entry.url),
+          name: String(entry.name ?? '').trim()
+        })).filter((p) => p.id && p.name);
+        this.searchIndex = index;
+        return index;
+      }),
+      shareReplay({ bufferSize: 1, refCount: false })
+    );
+    return this.searchIndexRequest;
+  }
+
+  searchPokemon(query: string): Observable<Pokemon[]> {
+    query = query.trim().toLowerCase();
+    if (!query) {
+      return of([]);
+    }
+
+    const isNumeric = /^\d+$/.test(query);
+    if (isNumeric) {
+      return this.getPokemonDetails(query).pipe(
+        map(p => [p]),
+        catchError(() => of([]))
+      );
+    }
+
+    return this.getSearchIndex().pipe(
+      switchMap(index => {
+        const exactMatch = index.find(p => p.name === query);
+        if (exactMatch) {
+          return this.getPokemonDetails(exactMatch.id).pipe(
+            map(p => [p]),
+            catchError(() => of([]))
+          );
+        }
+
+        const matches = index.filter(p => p.name.includes(query)).slice(0, 50);
+        if (matches.length === 0) return of([]);
+
+        const pokemonList: Pokemon[] = matches.map(m => ({
+          id: m.id,
+          name: m.name,
+          types: [],
+          height: 0,
+          weight: 0,
+          sprite: this.getSpriteUrl(m.id),
+          spriteShiny: this.getShinySpriteUrl(m.id),
+          description: ''
+        }));
+
+        return this.hydratePokemonTypes(pokemonList);
+      })
+    );
+  }
+
+  private hydratePokemonTypes(pokemonList: Pokemon[]): Observable<Pokemon[]> {
+    if (!pokemonList.length) {
+      return of([]);
+    }
+    return forkJoin(
+      pokemonList.map((pokemon) => {
+        const cached = this.pokemonCache().get(String(pokemon.id));
+        if (cached && cached.types && cached.types.length > 0) {
+          return of({
+            ...pokemon,
+            types: cached.types,
+          });
+        }
+
+        return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${pokemon.id}`).pipe(
+          map((details) => ({
+            ...pokemon,
+            types: Array.isArray(details?.types)
+              ? details.types.map((entry: any) => sanitizePokemonType(entry.type?.name)).filter((t: string) => t !== 'unknown')
+              : [],
+          })),
+          catchError(() => of(pokemon)),
+        );
+      }),
+    );
+  }
+
   clearCache(): void {
     this.cacheSignal.set(new Map());
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -187,6 +213,10 @@ export class PokedexService {
         console.warn('Failed to clear Pokémon cache from localStorage:', error);
       }
     }
+  }
+
+  cachePokemon(pokemon: Pokemon): void {
+    this.savePokemonToCache(pokemon);
   }
 
   private savePokemonToCache(pokemon: Pokemon): void {

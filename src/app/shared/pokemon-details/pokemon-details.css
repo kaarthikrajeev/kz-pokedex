@@ -262,31 +262,3 @@
   }
 }
 
-/* Neo-Brutalist Scrollbar Utility Class */
-.neo-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #191919 var(--panel, #f6f0e8);
-}
-
-.neo-scrollbar::-webkit-scrollbar {
-  width: 14px;
-}
-
-.neo-scrollbar::-webkit-scrollbar-track {
-  background: var(--panel, #f6f0e8);
-  border-left: 3px solid var(--outline, #111111);
-}
-
-.neo-scrollbar::-webkit-scrollbar-thumb {
-  background: #191919;
-  border: 3px solid var(--outline, #111111);
-  border-radius: 0;
-}
-
-.neo-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--red, #ff5a3c);
-}
-
-.neo-scrollbar::-webkit-scrollbar-corner {
-  background: var(--panel, #f6f0e8);
-}

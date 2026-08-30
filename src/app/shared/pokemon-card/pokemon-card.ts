@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { Pokemon } from '../../models/types';
 import { FavoritesService } from '../../services/favorites';
+import { PokedexService } from '../../services/pokedex';
 
 @Component({
   selector: 'app-pokemon-card',
@@ -9,6 +10,7 @@ import { FavoritesService } from '../../services/favorites';
 })
 export class PokemonCardComponent {
   private readonly favoritesService = inject(FavoritesService);
+  private readonly pokedexService = inject(PokedexService);
 
   @Input({ required: true }) pokemon!: Pokemon;
   @Input() sprite = '';
@@ -24,6 +26,7 @@ export class PokemonCardComponent {
     event.preventDefault();
     if (this.pokemon?.id) {
       this.favoritesService.toggleFavorite(this.pokemon.id);
+      this.pokedexService.cachePokemon(this.pokemon);
     }
   }
 
