@@ -2,7 +2,19 @@ import { Injectable, signal, Signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of, forkJoin, throwError } from 'rxjs';
 import { map, catchError, switchMap, shareReplay } from 'rxjs/operators';
-import { Pokemon, PokemonAbility, PokemonStat, PaginatedResponse, NamedAPIResource } from '../models/types';
+import {
+  Pokemon,
+  PokemonAbility,
+  PokemonStat,
+  PaginatedResponse,
+  NamedAPIResource,
+  EvolutionChain,
+  EvolutionNode,
+  EvolutionPokemon,
+  EvolutionRequirement,
+  EvolutionStage,
+  EvolutionStagePokemon,
+} from '../models/types';
 import { sanitizePokemonType, sanitizeStatName, VALID_STAT_NAMES } from '../models/pokemon-types';
 
 const POKE_API_BASE_URL = 'https://pokeapi.co/api/v2';
@@ -18,6 +30,8 @@ export class PokedexService {
   private readonly cacheSignal = signal<Map<string, Pokemon>>(this.loadInitialCache());
   public readonly pokemonCache: Signal<Map<string, Pokemon>> = this.cacheSignal.asReadonly();
   private readonly pokemonRequests = new Map<string, Observable<Pokemon>>();
+  private readonly evolutionChainCache = new Map<string, EvolutionChain>();
+  private readonly evolutionRequests = new Map<string, Observable<EvolutionChain>>();
 
   constructor(private readonly http: HttpClient) {}
 
@@ -74,6 +88,9 @@ export class PokedexService {
     const cachedPokemon = this.pokemonCache().get(cacheKey);
 
     if (cachedPokemon && this.hasCompleteDetails(cachedPokemon)) {
+      if (!cachedPokemon.cryUrl && cachedPokemon.id) {
+        cachedPokemon.cryUrl = `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${cachedPokemon.id}.ogg`;
+      }
       return of(cachedPokemon);
     }
 
@@ -206,6 +223,7 @@ export class PokedexService {
 
   clearCache(): void {
     this.cacheSignal.set(new Map());
+    this.evolutionChainCache.clear();
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
         localStorage.removeItem(POKEMON_CACHE_STORAGE_KEY);
@@ -217,6 +235,224 @@ export class PokedexService {
 
   cachePokemon(pokemon: Pokemon): void {
     this.savePokemonToCache(pokemon);
+  }
+
+  getEvolutionChain(urlOrId: string | number): Observable<EvolutionChain> {
+    const rawKey = String(urlOrId).trim();
+    if (!rawKey) {
+      return throwError(() => new Error('Invalid evolution chain identifier.'));
+    }
+
+    const cacheKey = rawKey.toLowerCase();
+    const cached = this.evolutionChainCache.get(cacheKey);
+    if (cached) {
+      return of(cached);
+    }
+
+    const cachedRequest = this.evolutionRequests.get(cacheKey);
+    if (cachedRequest) {
+      return cachedRequest;
+    }
+
+    const url = rawKey.startsWith('http')
+      ? rawKey
+      : `${POKE_API_BASE_URL}/evolution-chain/${rawKey}`;
+
+    const request = this.http.get<any>(url).pipe(
+      switchMap((apiResponse) => this.hydrateAndBuildEvolutionChain(apiResponse, url)),
+      map((chain) => {
+        this.saveEvolutionChainToCache(chain, url);
+        this.evolutionRequests.delete(cacheKey);
+        return chain;
+      }),
+      catchError(() => {
+        this.evolutionRequests.delete(cacheKey);
+        return throwError(() => new Error('Unable to load evolution chain.'));
+      }),
+      shareReplay({ bufferSize: 1, refCount: false }),
+    );
+
+    this.evolutionRequests.set(cacheKey, request);
+    return request;
+  }
+
+  getEvolutionChainForPokemon(pokemon: Pokemon): Observable<EvolutionChain> {
+    if (pokemon.evolutionChainUrl) {
+      return this.getEvolutionChain(pokemon.evolutionChainUrl);
+    }
+
+    return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon-species/${pokemon.id}`).pipe(
+      switchMap((species) => {
+        const evoUrl = species?.evolution_chain?.url;
+        if (!evoUrl) {
+          return throwError(() => new Error('No evolution chain found for species.'));
+        }
+        return this.getEvolutionChain(evoUrl);
+      }),
+      catchError(() => throwError(() => new Error('Unable to load evolution chain.'))),
+    );
+  }
+
+  private saveEvolutionChainToCache(chain: EvolutionChain, url: string): void {
+    const chainIdKey = String(chain.id).toLowerCase();
+    this.evolutionChainCache.set(chainIdKey, chain);
+    this.evolutionChainCache.set(url.toLowerCase(), chain);
+    this.indexSpeciesInEvolutionChain(chain.root, chain);
+  }
+
+  private indexSpeciesInEvolutionChain(node: EvolutionNode, chain: EvolutionChain): void {
+    if (!node?.pokemon) return;
+    this.evolutionChainCache.set(`species:${node.pokemon.id}`, chain);
+    this.evolutionChainCache.set(`species:${node.pokemon.name.toLowerCase()}`, chain);
+    for (const child of node.evolvesTo) {
+      this.indexSpeciesInEvolutionChain(child, chain);
+    }
+  }
+
+  private collectSpeciesFromChain(
+    chainNode: any,
+    collected: { id: number; name: string }[] = [],
+  ): { id: number; name: string }[] {
+    if (!chainNode || !chainNode.species) {
+      return collected;
+    }
+
+    const speciesUrl = String(chainNode.species.url ?? '');
+    const id = this.extractSpeciesIdFromUrl(speciesUrl);
+    const name = String(chainNode.species.name ?? '').trim();
+
+    if (id && name) {
+      collected.push({ id, name });
+    }
+
+    const evolvesTo = Array.isArray(chainNode.evolves_to) ? chainNode.evolves_to : [];
+    for (const child of evolvesTo) {
+      this.collectSpeciesFromChain(child, collected);
+    }
+
+    return collected;
+  }
+
+  private hydrateAndBuildEvolutionChain(
+    apiResponse: any,
+    requestUrl: string,
+  ): Observable<EvolutionChain> {
+    const rawChain = apiResponse?.chain;
+    if (!rawChain) {
+      return throwError(() => new Error('Malformed evolution chain data.'));
+    }
+
+    const allSpecies = this.collectSpeciesFromChain(rawChain);
+    const uniqueIds = Array.from(new Set(allSpecies.map((s) => s.id)));
+
+    const typeObservables = uniqueIds.map((id) => {
+      const cached = this.pokemonCache().get(String(id));
+      if (cached && cached.types && cached.types.length > 0) {
+        return of({ id, types: cached.types });
+      }
+      return this.http.get<any>(`${POKE_API_BASE_URL}/pokemon/${id}`).pipe(
+        map((details) => ({
+          id,
+          types: Array.isArray(details?.types)
+            ? details.types
+                .map((entry: any) => sanitizePokemonType(entry.type?.name))
+                .filter((t: string) => t !== 'unknown')
+            : [],
+        })),
+        catchError(() => of({ id, types: [] })),
+      );
+    });
+
+    return (typeObservables.length ? forkJoin(typeObservables) : of([])).pipe(
+      map((typeResults) => {
+        const typesMap = new Map<number, string[]>();
+        for (const res of typeResults) {
+          typesMap.set(res.id, res.types);
+        }
+
+        const chainId = Number(apiResponse?.id ?? this.extractSpeciesIdFromUrl(requestUrl));
+        const babyTriggerItem = apiResponse?.baby_trigger_item?.name
+          ? formatItemName(apiResponse.baby_trigger_item.name)
+          : null;
+
+        const rootNode = this.parseEvolutionNode(rawChain, typesMap);
+        const stages = this.buildEvolutionStages(rootNode);
+        const hasEvolutions = rootNode.evolvesTo.length > 0;
+
+        return {
+          id: chainId,
+          babyTriggerItem,
+          root: rootNode,
+          stages,
+          hasEvolutions,
+        };
+      }),
+    );
+  }
+
+  private parseEvolutionNode(rawNode: any, typesMap: Map<number, string[]>): EvolutionNode {
+    const speciesUrl = String(rawNode?.species?.url ?? '');
+    const id = this.extractSpeciesIdFromUrl(speciesUrl);
+    const name = String(rawNode?.species?.name ?? '').trim();
+    const isBaby = Boolean(rawNode?.is_baby);
+    const types = typesMap.get(id) ?? [];
+    const requirements = formatEvolutionRequirements(rawNode?.evolution_details ?? []);
+
+    const rawEvolvesTo = Array.isArray(rawNode?.evolves_to) ? rawNode.evolves_to : [];
+    const evolvesTo: EvolutionNode[] = rawEvolvesTo.map((child: any) =>
+      this.parseEvolutionNode(child, typesMap),
+    );
+
+    return {
+      pokemon: {
+        id,
+        name,
+        sprite: this.getSpriteUrl(id),
+        spriteShiny: this.getShinySpriteUrl(id),
+        types,
+        isBaby,
+      },
+      requirements,
+      evolvesTo,
+    };
+  }
+
+  private buildEvolutionStages(root: EvolutionNode): EvolutionStage[] {
+    const stageMap = new Map<number, EvolutionStagePokemon[]>();
+
+    const traverse = (node: EvolutionNode, depth: number, fromName?: string) => {
+      if (!stageMap.has(depth)) {
+        stageMap.set(depth, []);
+      }
+
+      stageMap.get(depth)!.push({
+        pokemon: node.pokemon,
+        fromPokemonName: fromName,
+        requirements: node.requirements,
+      });
+
+      for (const child of node.evolvesTo) {
+        traverse(child, depth + 1, node.pokemon.name);
+      }
+    };
+
+    traverse(root, 0);
+
+    const stages: EvolutionStage[] = [];
+    const sortedDepths = Array.from(stageMap.keys()).sort((a, b) => a - b);
+    for (const depth of sortedDepths) {
+      stages.push({
+        stageIndex: depth,
+        pokemon: stageMap.get(depth)!,
+      });
+    }
+
+    return stages;
+  }
+
+  private extractSpeciesIdFromUrl(url: string): number {
+    const match = url.match(/\/(?:pokemon-species|pokemon|evolution-chain)\/(\d+)\/?/);
+    return match ? Number(match[1]) : 0;
   }
 
   private savePokemonToCache(pokemon: Pokemon): void {
@@ -242,6 +478,9 @@ export class PokedexService {
         if (Array.isArray(parsed)) {
           for (const item of parsed) {
             if (item && typeof item.id === 'number') {
+              if (!item.cryUrl && !item.cries) {
+                item.cryUrl = `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${item.id}.ogg`;
+              }
               map.set(String(item.id), item);
               if (item.name) {
                 map.set(item.name.toLowerCase(), item);
@@ -335,7 +574,11 @@ export class PokedexService {
       };
     });
 
-    return {
+    const latestCry = pokemon?.cries?.latest ? String(pokemon.cries.latest) : null;
+    const legacyCry = pokemon?.cries?.legacy ? String(pokemon.cries.legacy) : null;
+    const cryUrl = latestCry || legacyCry || null;
+
+    const mapped: Pokemon = {
       id: Number(pokemon?.id ?? 0),
       name: String(pokemon?.name ?? ''),
       types,
@@ -351,7 +594,18 @@ export class PokedexService {
       abilities,
       stats,
       totalStats,
+      cries: {
+        latest: latestCry,
+        legacy: legacyCry,
+      },
+      cryUrl,
     };
+
+    if (species?.evolution_chain?.url) {
+      mapped.evolutionChainUrl = String(species.evolution_chain.url);
+    }
+
+    return mapped;
   }
 
   private getDescription(species: any): string {
@@ -365,4 +619,153 @@ export class PokedexService {
       .replace(/\s*\n\s*/g, ' ')
       .trim();
   }
+}
+
+export function formatItemName(name: string): string {
+  if (!name) return '';
+  return name
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+export function formatEvolutionRequirements(details: any[]): EvolutionRequirement[] {
+  if (!Array.isArray(details) || details.length === 0) {
+    return [{ description: 'Base Stage' }];
+  }
+
+  return details.map((detail) => {
+    const parts: string[] = [];
+
+    const minLevel = detail?.min_level != null ? Number(detail.min_level) : null;
+    const item = detail?.item?.name ? formatItemName(detail.item.name) : null;
+    const heldItem = detail?.held_item?.name ? formatItemName(detail.held_item.name) : null;
+    const trigger = String(detail?.trigger?.name ?? '').trim();
+    const minHappiness = detail?.min_happiness != null ? Number(detail.min_happiness) : null;
+    const minAffection = detail?.min_affection != null ? Number(detail.min_affection) : null;
+    const minBeauty = detail?.min_beauty != null ? Number(detail.min_beauty) : null;
+    const rawTimeOfDay = String(detail?.time_of_day ?? '').trim();
+    const timeOfDay = rawTimeOfDay
+      ? rawTimeOfDay.charAt(0).toUpperCase() + rawTimeOfDay.slice(1)
+      : null;
+    const location = detail?.location?.name ? formatItemName(detail.location.name) : null;
+    const knownMove = detail?.known_move?.name ? formatItemName(detail.known_move.name) : null;
+    const knownMoveType = detail?.known_move_type?.name
+      ? formatItemName(detail.known_move_type.name)
+      : null;
+    const tradeSpecies = detail?.trade_species?.name
+      ? formatItemName(detail.trade_species.name)
+      : null;
+    const partySpecies = detail?.party_species?.name
+      ? formatItemName(detail.party_species.name)
+      : null;
+    const partyType = detail?.party_type?.name ? formatItemName(detail.party_type.name) : null;
+    const needsOverworldRain = Boolean(detail?.needs_overworld_rain);
+    const turnUpsideDown = Boolean(detail?.turn_upside_down);
+
+    let gender: string | null = null;
+    if (detail?.gender === 1) gender = 'Female';
+    else if (detail?.gender === 2) gender = 'Male';
+
+    let relativePhysicalStats: string | null = null;
+    if (detail?.relative_physical_stats === 1) relativePhysicalStats = 'Atk > Def';
+    else if (detail?.relative_physical_stats === -1) relativePhysicalStats = 'Atk < Def';
+    else if (detail?.relative_physical_stats === 0) relativePhysicalStats = 'Atk = Def';
+
+    if (minLevel != null) {
+      parts.push(`Level ${minLevel}`);
+    } else if (item) {
+      parts.push(`Use ${item}`);
+    } else if (trigger === 'trade') {
+      parts.push('Trade');
+    } else if (trigger === 'shed') {
+      parts.push('Shed');
+    } else if (trigger && trigger !== 'level-up') {
+      parts.push(formatItemName(trigger));
+    }
+
+    if (heldItem) {
+      parts.push(`Hold ${heldItem}`);
+    }
+
+    if (minHappiness != null) {
+      parts.push('High Friendship');
+    }
+
+    if (minAffection != null) {
+      parts.push('High Affection');
+    }
+
+    if (minBeauty != null) {
+      parts.push('High Beauty');
+    }
+
+    if (timeOfDay) {
+      parts.push(timeOfDay);
+    }
+
+    if (location) {
+      parts.push(`at ${location}`);
+    }
+
+    if (knownMove) {
+      parts.push(`Learn ${knownMove}`);
+    }
+
+    if (knownMoveType) {
+      parts.push(`${knownMoveType} Move`);
+    }
+
+    if (tradeSpecies) {
+      parts.push(`for ${tradeSpecies}`);
+    }
+
+    if (partySpecies) {
+      parts.push(`with ${partySpecies}`);
+    }
+
+    if (partyType) {
+      parts.push(`with ${partyType}-type`);
+    }
+
+    if (gender) {
+      parts.push(`(${gender})`);
+    }
+
+    if (relativePhysicalStats) {
+      parts.push(relativePhysicalStats);
+    }
+
+    if (needsOverworldRain) {
+      parts.push('During Rain');
+    }
+
+    if (turnUpsideDown) {
+      parts.push('Upside Down');
+    }
+
+    const description = parts.length > 0 ? parts.join(' + ') : 'Level Up';
+
+    return {
+      trigger,
+      minLevel,
+      item,
+      heldItem,
+      timeOfDay,
+      minHappiness,
+      minAffection,
+      minBeauty,
+      knownMove,
+      knownMoveType,
+      location,
+      gender,
+      tradeSpecies,
+      partySpecies,
+      partyType,
+      relativePhysicalStats,
+      needsOverworldRain,
+      turnUpsideDown,
+      description,
+    };
+  });
 }

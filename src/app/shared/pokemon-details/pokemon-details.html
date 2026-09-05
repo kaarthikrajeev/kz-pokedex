@@ -52,6 +52,29 @@
             ✦
           </button>
 
+          <button
+            type="button"
+            class="pokemon-cry-button"
+            [class.pokemon-cry-button--playing]="isPlayingCry"
+            [class.pokemon-cry-button--muted]="!isSoundEnabled"
+            [class.pokemon-cry-button--disabled]="!hasCry"
+            [disabled]="!hasCry"
+            [attr.aria-label]="cryButtonAriaLabel"
+            [attr.aria-pressed]="isPlayingCry"
+            [title]="cryButtonTitle"
+            (click)="playCry($event)"
+          >
+            @if (isPlayingCry) {
+              <span class="cry-icon cry-icon--playing" aria-hidden="true">🔊</span>
+            } @else if (!isSoundEnabled) {
+              <span class="cry-icon cry-icon--muted" aria-hidden="true">🔇</span>
+            } @else if (!hasCry) {
+              <span class="cry-icon cry-icon--disabled" aria-hidden="true">🔇</span>
+            } @else {
+              <span class="cry-icon" aria-hidden="true">🔊</span>
+            }
+          </button>
+
           @if (spriteLoading()) {
             <div class="pokemon-details__sprite-loader" aria-label="Loading sprite">
               <app-pokemon-loader message="Loading sprite..." />
@@ -136,6 +159,95 @@
             </div>
           }
         </div>
+      </div>
+
+      <div class="evolution-chain-section">
+        <div class="evolution-chain-header">
+          <h3 class="evolution-chain-title">Evolution Chain</h3>
+          @if (evolutionChain()?.babyTriggerItem) {
+            <span class="evolution-baby-badge">Baby Trigger: {{ evolutionChain()?.babyTriggerItem }}</span>
+          }
+        </div>
+
+        @if (evolutionLoading()) {
+          <div class="evolution-chain-loading" aria-busy="true" aria-label="Loading evolution chain">
+            <div class="evolution-skeleton" aria-hidden="true">
+              <div class="skeleton-evo-card"></div>
+              <div class="skeleton-evo-arrow"></div>
+              <div class="skeleton-evo-card"></div>
+            </div>
+            <app-pokemon-loader message="Loading evolutions..." />
+          </div>
+        } @else if (evolutionError()) {
+          <div class="evolution-chain-error" role="status">
+            <p>{{ evolutionError() }}</p>
+          </div>
+        } @else if (evolutionChain(); as chain) {
+          @if (!chain.hasEvolutions) {
+            <div class="evolution-chain-empty">
+              <p>No known evolution.</p>
+            </div>
+          } @else {
+            <div class="evolution-stages-container" role="region" aria-label="Evolution chain flow">
+              @for (stage of chain.stages; track stage.stageIndex; let isFirst = $first; let isLast = $last) {
+                <div class="evolution-stage">
+                  <div class="evolution-stage-pokemon-list">
+                    @for (item of stage.pokemon; track item.pokemon.id) {
+                      <div class="evolution-node-item">
+                        @if (!isFirst && item.requirements.length > 0) {
+                          <div class="evolution-requirement-tag">
+                            <span class="evolution-arrow-symbol" aria-hidden="true">↓</span>
+                            @for (req of item.requirements; track req.description) {
+                              <span class="requirement-badge">{{ req.description }}</span>
+                            }
+                          </div>
+                        }
+
+                        <button
+                          type="button"
+                          class="evolution-card"
+                          [class.evolution-card--current]="isCurrentPokemon(item.pokemon.id)"
+                          [attr.aria-label]="(isCurrentPokemon(item.pokemon.id) ? 'Current: ' : 'View ') + item.pokemon.name + ' details'"
+                          [attr.aria-current]="isCurrentPokemon(item.pokemon.id) ? 'true' : null"
+                          (click)="onSelectEvolutionPokemon(item.pokemon)"
+                        >
+                          @if (isCurrentPokemon(item.pokemon.id)) {
+                            <span class="current-badge" aria-hidden="true">CURRENT</span>
+                          }
+                          <div class="evolution-card__image-box">
+                            <img
+                              [src]="getSpriteForEvolution(item.pokemon)"
+                              [alt]="item.pokemon.name"
+                              loading="lazy"
+                            />
+                            @if (item.pokemon.isBaby) {
+                              <span class="baby-badge" title="Baby Pokémon">BABY</span>
+                            }
+                          </div>
+                          <div class="evolution-card__info">
+                            <span class="evolution-card__id">#{{ formatNumber(item.pokemon.id) }}</span>
+                            <strong class="evolution-card__name">{{ item.pokemon.name }}</strong>
+                            <div class="evolution-card__types">
+                              @for (type of item.pokemon.types; track type) {
+                                <span class="type {{ sanitizeType(type) }}">{{ type }}</span>
+                              }
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    }
+                  </div>
+                </div>
+
+                @if (!isLast) {
+                  <div class="evolution-stage-divider" aria-hidden="true">
+                    <span class="evolution-stage-arrow">→</span>
+                  </div>
+                }
+              }
+            </div>
+          }
+        }
       </div>
     }
   </div>

@@ -13,15 +13,18 @@ export class FavoritesService {
     return this.favoritesSignal().has(pokemonId);
   }
 
-  toggleFavorite(pokemonId: number): void {
+  toggleFavorite(pokemonId: number): boolean {
     const current = new Set(this.favoritesSignal());
+    let added = false;
     if (current.has(pokemonId)) {
       current.delete(pokemonId);
     } else {
       current.add(pokemonId);
+      added = true;
     }
     this.favoritesSignal.set(current);
     this.persistToStorage(current);
+    return added;
   }
 
   clearFavorites(): void {

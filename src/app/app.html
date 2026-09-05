@@ -13,6 +13,18 @@
         <span>Visible</span>
         <strong>{{ state.filteredPokemon().length }} entries</strong>
       </div>
+      <button
+        type="button"
+        class="topbar__sound-toggle"
+        [class.topbar__sound-toggle--muted]="!soundService.soundEnabled()"
+        [attr.aria-label]="soundService.soundEnabled() ? 'Disable sound effects' : 'Enable sound effects'"
+        [attr.aria-pressed]="soundService.soundEnabled()"
+        [title]="soundService.soundEnabled() ? 'Sound: ON (click to mute)' : 'Sound: OFF (click to unmute)'"
+        (click)="soundService.toggleSound()"
+      >
+        <span class="topbar__sound-icon" aria-hidden="true">{{ soundService.soundEnabled() ? '🔊' : '🔇' }}</span>
+        <span class="topbar__sound-label">{{ soundService.soundEnabled() ? 'SOUND ON' : 'MUTED' }}</span>
+      </button>
     </div>
   </header>
 
@@ -76,8 +88,8 @@
     @if (state.loading()) {
       <app-pokemon-loader message="Loading Pokémon..." />
     }
-    @if (state.error() || error()) {
-      <p class="status status--error">{{ state.error() || error() }}</p>
+    @if (state.error() || pokemonDetailResource.error()) {
+      <p class="status status--error">{{ state.error() || 'Unable to load Pokémon details right now.' }}</p>
     }
 
     @if (state.filteredPokemon().length === 0 && !state.loading()) {
@@ -141,11 +153,12 @@
     &times;
   </button>
   <app-pokemon-details
-    [pokemon]="activePokemon()"
-    [loading]="detailsLoading()"
+    [pokemon]="pokemonDetailResource.value() ?? null"
+    [loading]="pokemonDetailResource.isLoading()"
     [shiny]="isShiny()"
     [sprite]="currentSprite()"
     (shinyToggle)="toggleShiny($event)"
     (imageError)="onImageError($event)"
+    (pokemonSelected)="openPokemonDetails($event)"
   />
 </dialog>

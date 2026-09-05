@@ -11,15 +11,18 @@ import {
   ElementRef,
   AfterViewInit,
 } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule, DOCUMENT } from '@angular/common';
 import { PokedexService } from './services/pokedex';
 import { FavoritesService } from './services/favorites';
+import { SoundService } from './services/sound';
 import { PokemonListStateService } from './services/pokemon-list-state';
 import { Pokemon } from './models/types';
 import { PokemonCardComponent } from './shared/pokemon-card/pokemon-card';
 import { PokemonDetailsComponent } from './shared/pokemon-details/pokemon-details';
 import { PokemonLoaderComponent } from './shared/pokemon-loader/pokemon-loader';
 import { POKEMON_TYPES, sanitizePokemonType } from './models/pokemon-types';
+import { of } from 'rxjs';
 
 @Component({
   selector: 'app-root',
@@ -33,11 +36,18 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   readonly #pokemonService = inject(PokedexService);
   protected readonly state = inject(PokemonListStateService);
   protected readonly favoritesService = inject(FavoritesService);
+  protected readonly soundService = inject(SoundService);
 
-  protected activePokemon = signal<Pokemon | null>(null);
+  protected activePokemonStub = signal<Pokemon | null>(null);
   protected isShiny = signal(false);
-  protected detailsLoading = signal(false);
-  protected error = signal<string | null>(null);
+
+  protected pokemonDetailResource = rxResource<Pokemon | undefined, number | undefined>({
+    params: () => this.activePokemonStub()?.id,
+    stream: ({ params: id }) => {
+      if (id === undefined) return of(undefined);
+      return this.#pokemonService.getPokemonDetails(id);
+    }
+  });
 
   protected pokemonTypes = POKEMON_TYPES;
   protected readonly favorites = this.favoritesService.favorites;
@@ -48,7 +58,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   private intersectionObserver: IntersectionObserver | null = null;
 
   protected currentSprite = computed(() => {
-    const pokemon = this.activePokemon();
+    const pokemon = this.pokemonDetailResource.value();
 
     if (!pokemon) {
       return '';
@@ -69,18 +79,11 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
 
   private readonly failedSpriteUrls = signal<Set<string>>(new Set());
   private readonly preloadedSprites = new Set<string>();
-  private detailRequestId = 0;
-  private readonly fallbackSprite = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-      <rect width="96" height="96" fill="#dfe6ef"/>
-      <rect x="12" y="12" width="72" height="72" fill="#f6f1ea" stroke="#111111" stroke-width="4"/>
-      <text x="50%" y="54%" text-anchor="middle" font-size="30" font-family="Arial, sans-serif" fill="#111111">?</text>
-    </svg>
-  `)}`;
+  private readonly fallbackSprite = "data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2296%22%20height%3D%2296%22%20viewBox%3D%220%200%2096%2096%22%3E%3Crect%20width%3D%2296%22%20height%3D%2296%22%20fill%3D%22%23dfe6ef%22%2F%3E%3Crect%20x%3D%2212%22%20y%3D%2212%22%20width%3D%2272%22%20height%3D%2272%22%20fill%3D%22%23f6f1ea%22%20stroke%3D%22%23111111%22%20stroke-width%3D%224%22%2F%3E%3Ctext%20x%3D%2250%25%22%20y%3D%2254%25%22%20text-anchor%3D%22middle%22%20font-size%3D%2230%22%20font-family%3D%22Arial%2C%20sans-serif%22%20fill%3D%22%23111111%22%3E%3F%3C%2Ftext%3E%3C%2Fsvg%3E";
 
   constructor() {
     effect((onCleanup) => {
-      const isOpen = Boolean(this.activePokemon());
+      const isOpen = Boolean(this.activePokemonStub());
       const body = this.#document?.body;
       if (body) {
         body.classList.toggle('modal-open', isOpen);
@@ -97,6 +100,17 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
           body.style.removeProperty('overflow');
         }
       });
+    });
+
+    effect(() => {
+      const pokemonDetails = this.pokemonDetailResource.value();
+      if (pokemonDetails) {
+        this.preloadSprite(pokemonDetails.sprite);
+        this.preloadSprite(pokemonDetails.spriteShiny);
+        if (pokemonDetails.cryUrl && this.soundService.soundEnabled()) {
+          this.soundService.playCry(pokemonDetails.cryUrl, false);
+        }
+      }
     });
   }
 
@@ -128,6 +142,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.soundService.stop();
     if (this.intersectionObserver) {
       this.intersectionObserver.disconnect();
     }
@@ -139,6 +154,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   protected openPokemonDetails(pokemon: Pokemon) {
+    this.soundService.stop();
     const dialog = this.#document.getElementById('details') as HTMLDialogElement | null;
     if (dialog && !dialog.matches(':popover-open')) {
       try {
@@ -148,50 +164,30 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
-    const requestId = ++this.detailRequestId;
-    this.detailsLoading.set(true);
-    this.error.set(null);
-    if (this.activePokemon()?.id !== pokemon.id) {
+    if (this.activePokemonStub()?.id !== pokemon.id) {
       this.isShiny.set(false);
     }
-
-    this.#pokemonService.getPokemonDetails(pokemon.id).subscribe({
-      next: (pokemonDetails) => {
-        if (requestId !== this.detailRequestId) {
-          return;
-        }
-
-        this.activePokemon.set(pokemonDetails);
-        this.detailsLoading.set(false);
-        this.preloadSprite(pokemonDetails.sprite);
-        this.preloadSprite(pokemonDetails.spriteShiny);
-      },
-      error: () => {
-        if (requestId !== this.detailRequestId) {
-          return;
-        }
-
-        this.activePokemon.set(null);
-        this.detailsLoading.set(false);
-        this.error.set('Unable to load Pokémon details right now.');
-      },
-    });
+    
+    this.activePokemonStub.set(pokemon);
   }
 
   protected toggleShiny(event: Event): void {
     event.stopPropagation();
-    this.isShiny.update((value) => !value);
+    const nextShiny = !this.isShiny();
+    this.isShiny.set(nextShiny);
+    if (nextShiny) {
+      this.soundService.playShinySparkleSound();
+    }
   }
 
   protected closeDetails(): void {
-    this.detailRequestId++;
-    this.activePokemon.set(null);
-    this.detailsLoading.set(false);
+    this.soundService.stop();
+    this.activePokemonStub.set(null);
     this.isShiny.set(false);
   }
 
   protected onDetailsToggle(event: Event): void {
-    if ((event as ToggleEvent).newState === 'closed' && this.activePokemon()) {
+    if ((event as ToggleEvent).newState === 'closed' && this.activePokemonStub()) {
       this.closeDetails();
     }
   }

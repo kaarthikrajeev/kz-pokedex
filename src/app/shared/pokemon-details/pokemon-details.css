@@ -51,6 +51,75 @@
   outline-offset: 2px;
 }
 
+.pokemon-cry-button {
+  position: absolute;
+  bottom: 0.55rem;
+  right: 0.55rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 3px solid var(--outline, #000);
+  background: #fbfaf7;
+  box-shadow: 3px 3px 0 var(--outline, #000);
+  color: var(--ink, #111);
+  font-size: 1.15rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.pokemon-cry-button:hover:not(:disabled),
+.pokemon-cry-button:focus-visible:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--outline, #000);
+}
+
+.pokemon-cry-button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--outline, #000);
+}
+
+.pokemon-cry-button:focus-visible {
+  outline: 3px solid #7ad7ff;
+  outline-offset: 2px;
+}
+
+.pokemon-cry-button--playing {
+  background: #ffd000;
+  color: #000;
+  animation: cry-pulse 1s ease-in-out infinite alternate;
+}
+
+.pokemon-cry-button--muted {
+  background: #e6e0d5;
+  color: #666;
+}
+
+.pokemon-cry-button--disabled,
+.pokemon-cry-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: 2px 2px 0 var(--outline, #000);
+}
+
+@keyframes cry-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 3px 3px 0 var(--outline, #000);
+  }
+  100% {
+    transform: scale(1.08);
+    box-shadow: 5px 5px 0 var(--outline, #000);
+  }
+}
+
 .pokemon-abilities {
   display: flex;
   flex-direction: column;
@@ -259,6 +328,346 @@
   .stat-row {
     grid-template-columns: 65px 35px 1fr;
     gap: 0.4rem;
+  }
+}
+
+/* Evolution Chain Section */
+.evolution-chain-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 3px solid var(--outline, #000);
+  background: #fbfaf7;
+  box-shadow: 4px 4px 0 var(--outline, #000);
+}
+
+.evolution-chain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.35rem;
+  border-bottom: 3px solid var(--outline, #000);
+}
+
+.evolution-chain-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink, #111);
+}
+
+.evolution-baby-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  background: #ffd000;
+  color: #000;
+  border: 2px solid var(--outline, #000);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.evolution-chain-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0;
+  gap: 0.5rem;
+}
+
+.evolution-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.skeleton-evo-card {
+  width: 80px;
+  height: 95px;
+  border: 2.5px solid var(--outline, #000);
+  background: #e6e0d5;
+}
+
+.skeleton-evo-arrow {
+  width: 20px;
+  height: 4px;
+  background: #ccc;
+}
+
+.evolution-chain-error,
+.evolution-chain-empty {
+  padding: 0.65rem;
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.82rem;
+  color: var(--muted, #666);
+}
+
+.evolution-chain-empty p,
+.evolution-chain-error p {
+  margin: 0;
+}
+
+.evolution-stages-container {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.25rem 0;
+}
+
+.evolution-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.evolution-stage-pokemon-list {
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 0.5rem;
+  max-width: 360px;
+}
+
+.evolution-node-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+
+.evolution-requirement-tag {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.2rem;
+  max-width: 150px;
+  text-align: center;
+}
+
+.evolution-arrow-symbol {
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: var(--ink, #111);
+}
+
+.requirement-badge {
+  display: inline-block;
+  padding: 0.12rem 0.4rem;
+  background: #191919;
+  color: #f8df5b;
+  border: 1.5px solid var(--outline, #000);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: capitalize;
+}
+
+.evolution-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 108px;
+  padding: 0.35rem 0.4rem;
+  border: 3px solid var(--outline, #000);
+  background: #fbfaf7;
+  box-shadow: 3px 3px 0 var(--outline, #000);
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.evolution-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--outline, #000);
+  background: #fff;
+}
+
+.evolution-card:focus-visible {
+  outline: 3px solid #7ad7ff;
+  outline-offset: 2px;
+}
+
+.evolution-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--outline, #000);
+}
+
+.evolution-card--current {
+  background: #ffd000;
+  box-shadow: 4px 4px 0 var(--outline, #000);
+}
+
+.evolution-card--current:hover {
+  background: #ffe04d;
+}
+
+.current-badge {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  background: #191919;
+  color: #ffd000;
+  border: 2px solid var(--outline, #000);
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.35rem;
+  box-shadow: 1.5px 1.5px 0 var(--outline, #000);
+  z-index: 2;
+  text-transform: uppercase;
+}
+
+.evolution-card__image-box {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.evolution-card__image-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.baby-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 0.52rem;
+  font-weight: 900;
+  padding: 0.05rem 0.2rem;
+  background: #ff579f;
+  color: #fff;
+  border: 1.5px solid var(--outline, #000);
+}
+
+.evolution-card__info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  width: 100%;
+  margin-top: 0.15rem;
+}
+
+.evolution-card__id {
+  font-size: 0.62rem;
+  font-weight: 900;
+  color: var(--muted, #666);
+  font-family: monospace;
+}
+
+.evolution-card__name {
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: capitalize;
+  color: var(--ink, #111);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin: 0;
+}
+
+.evolution-card__types {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.2rem;
+  justify-content: center;
+  max-width: 100%;
+  margin-top: 0.12rem;
+}
+
+.evolution-card__types .type {
+  font-size: 0.56rem;
+  padding: 0.08rem 0.28rem;
+  border-width: 1.5px;
+  box-shadow: 1.5px 1.5px 0 var(--outline, #000);
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+.evolution-stage-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.2rem;
+  align-self: flex-end;
+  margin-bottom: 2.8rem;
+}
+
+.evolution-stage-arrow {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: var(--ink, #111);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evolution-card {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .evolution-stages-container {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .evolution-stage-divider {
+    align-self: center;
+    margin-bottom: 0;
+  }
+
+  .evolution-stage-arrow {
+    transform: rotate(90deg);
+    display: inline-block;
+    font-size: 1.15rem;
+  }
+
+  .evolution-stage-pokemon-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+    gap: 0.4rem;
+  }
+
+  .evolution-card {
+    width: 96px;
+    padding: 0.3rem 0.35rem;
+  }
+
+  .evolution-card__image-box {
+    width: 48px;
+    height: 48px;
   }
 }
 
