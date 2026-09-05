@@ -32,7 +32,7 @@ describe('App', () => {
 
     expect(document.body.classList.contains('modal-open')).toBeFalse();
 
-    app.activePokemon.set({
+    app.activePokemonStub.set({
       id: 25,
       name: 'pikachu',
       types: ['electric'],
@@ -45,7 +45,7 @@ describe('App', () => {
     expect(document.body.classList.contains('modal-open')).toBeTrue();
     expect(document.body.style.overflow).toBe('hidden');
 
-    app.activePokemon.set(null);
+    app.activePokemonStub.set(null);
     fixture.detectChanges();
 
     expect(document.body.classList.contains('modal-open')).toBeFalse();
@@ -93,5 +93,50 @@ describe('App', () => {
     const roster = app.state.filteredPokemon();
     expect(roster.length).toBe(1);
     expect(roster[0].name).toBe('charmander');
+  });
+
+  it('should render the global sound toggle and allow toggling sound state', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance as any;
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const soundToggle = compiled.querySelector('.topbar__sound-toggle') as HTMLButtonElement;
+    expect(soundToggle).toBeTruthy();
+
+    expect(app.soundService.soundEnabled()).toBeTrue();
+    soundToggle.click();
+    fixture.detectChanges();
+
+    expect(app.soundService.soundEnabled()).toBeFalse();
+    expect(soundToggle.classList.contains('topbar__sound-toggle--muted')).toBeTrue();
+  });
+
+  it('should stop sound playback when closing details or destroying app', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance as any;
+    fixture.detectChanges();
+
+    spyOn(app.soundService, 'stop');
+
+    app.closeDetails();
+    expect(app.soundService.stop).toHaveBeenCalled();
+
+    app.ngOnDestroy();
+    expect(app.soundService.stop).toHaveBeenCalledTimes(2);
+  });
+
+  it('should play shiny sparkle sound when switching to shiny mode', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance as any;
+    fixture.detectChanges();
+
+    spyOn(app.soundService, 'playShinySparkleSound');
+
+    app.isShiny.set(false);
+    app.toggleShiny(new MouseEvent('click'));
+
+    expect(app.isShiny()).toBeTrue();
+    expect(app.soundService.playShinySparkleSound).toHaveBeenCalled();
   });
 });

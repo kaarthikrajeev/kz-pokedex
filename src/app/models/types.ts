@@ -56,6 +56,11 @@ export interface PokemonStat {
   percentage: number;
 }
 
+export interface PokemonCries {
+  latest?: string | null;
+  legacy?: string | null;
+}
+
 export interface Pokemon {
   id: number;
   name: string;
@@ -69,4 +74,63 @@ export interface Pokemon {
   abilities?: PokemonAbility[];
   stats?: PokemonStat[];
   totalStats?: number;
+  evolutionChainUrl?: string;
+  cries?: PokemonCries;
+  cryUrl?: string | null;
+}
+
+export interface EvolutionRequirement {
+  trigger?: string;
+  minLevel?: number | null;
+  item?: string | null;
+  heldItem?: string | null;
+  timeOfDay?: string | null;
+  minHappiness?: number | null;
+  minAffection?: number | null;
+  minBeauty?: number | null;
+  knownMove?: string | null;
+  knownMoveType?: string | null;
+  location?: string | null;
+  gender?: string | null;
+  tradeSpecies?: string | null;
+  partySpecies?: string | null;
+  partyType?: string | null;
+  relativePhysicalStats?: string | null;
+  needsOverworldRain?: boolean;
+  turnUpsideDown?: boolean;
+  description: string;
+}
+
+export interface EvolutionPokemon {
+  id: number;
+  name: string;
+  sprite: string;
+  spriteShiny?: string;
+  types: string[];
+  isBaby: boolean;
+}
+
+export interface EvolutionNode {
+  pokemon: EvolutionPokemon;
+  requirements: EvolutionRequirement[];
+  evolvesTo: EvolutionNode[];
+}
+
+export interface EvolutionStagePokemon {
+  pokemon: EvolutionPokemon;
+  fromPokemonName?: string;
+  requirements: EvolutionRequirement[];
+}
+
+export interface EvolutionStage {
+  stageIndex: number;
+  pokemon: EvolutionStagePokemon[];
+}
+
+export interface EvolutionChain {
+  id: number;
+  babyTriggerItem?: string | null;
+  root: EvolutionNode;
+  stages: EvolutionStage[];
+  hasEvolutions: boolean;
 }
