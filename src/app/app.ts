@@ -22,6 +22,7 @@ import { PokemonCardComponent } from './shared/pokemon-card/pokemon-card';
 import { PokemonDetailsComponent } from './shared/pokemon-details/pokemon-details';
 import { PokemonLoaderComponent } from './shared/pokemon-loader/pokemon-loader';
 import { POKEMON_TYPES, sanitizePokemonType } from './models/pokemon-types';
+import { POKEMON_REGIONS } from './models/regions';
 import { of } from 'rxjs';
 
 @Component({
@@ -50,6 +51,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   });
 
   protected pokemonTypes = POKEMON_TYPES;
+  protected pokemonRegions = POKEMON_REGIONS;
   protected readonly favorites = this.favoritesService.favorites;
   protected readonly sanitizeType = sanitizePokemonType;
 

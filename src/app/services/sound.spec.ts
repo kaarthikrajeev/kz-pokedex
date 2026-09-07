@@ -114,4 +114,69 @@ describe('SoundService', () => {
     service.setSoundEnabled(false);
     expect(() => service.playShinySparkleSound()).not.toThrow();
   });
+
+  it('should handle audio ended, error, and pause events', () => {
+    const audio = (service as any).audio as HTMLAudioElement;
+    if (audio) {
+      service.isPlaying.set(true);
+      service.currentCryUrl.set('test.ogg');
+
+      audio.dispatchEvent(new Event('ended'));
+      expect(service.isPlaying()).toBeFalse();
+      expect(service.currentCryUrl()).toBeNull();
+
+      service.isPlaying.set(true);
+      service.currentCryUrl.set('test.ogg');
+      audio.dispatchEvent(new Event('error'));
+      expect(service.isPlaying()).toBeFalse();
+      expect(service.currentCryUrl()).toBeNull();
+
+      service.isPlaying.set(true);
+      audio.dispatchEvent(new Event('pause'));
+      expect(service.isPlaying()).toBeFalse();
+    }
+  });
+
+  it('should handle playCry failure or rejection gracefully', async () => {
+    const audio = (service as any).audio as HTMLAudioElement;
+    if (audio) {
+      spyOn(audio, 'play').and.returnValue(Promise.reject(new Error('Autoplay blocked')));
+      const result = await service.playCry('https://example.com/cry.ogg');
+      expect(result).toBeFalse();
+      expect(service.isPlaying()).toBeFalse();
+      expect(service.currentCryUrl()).toBeNull();
+    }
+  });
+
+  it('should handle stop method when audio is playing or null', () => {
+    service.isPlaying.set(true);
+    service.currentCryUrl.set('https://example.com/cry.ogg');
+
+    service.stop();
+
+    expect(service.isPlaying()).toBeFalse();
+    expect(service.currentCryUrl()).toBeNull();
+  });
+
+  it('should resume suspended AudioContext', () => {
+    const mockCtx = {
+      state: 'suspended',
+      resume: jasmine.createSpy('resume').and.returnValue(Promise.resolve()),
+      currentTime: 0,
+      destination: {},
+      createGain: () => ({ gain: { setValueAtTime: () => {} }, connect: () => {} }),
+      createOscillator: () => ({
+        type: 'sine',
+        frequency: { setValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} },
+        connect: () => {},
+        start: () => {},
+        stop: () => {},
+      }),
+    };
+
+    (service as any).audioCtx = mockCtx;
+    const ctx = (service as any).getAudioContext();
+    expect(mockCtx.resume).toHaveBeenCalled();
+    expect(ctx).toBe(mockCtx as any);
+  });
 });

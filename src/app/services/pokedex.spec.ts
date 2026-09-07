@@ -2,7 +2,7 @@ import { HttpClient, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { PokedexService, formatEvolutionRequirements } from './pokedex';
+import { PokedexService, formatEvolutionRequirements, formatItemName } from './pokedex';
 import { Pokemon } from '../models/types';
 
 describe('PokedexService', () => {
@@ -601,4 +601,356 @@ describe('PokedexService', () => {
       speciesReq.flush({ flavor_text_entries: [] });
     });
   });
+
+  describe('Pagination & List Loading (getPokemonPage)', () => {
+    it('should fetch paginated pokemon list and hydrate types', (done) => {
+      service.getPokemonPage(2, 0).subscribe((result) => {
+        expect(result.pokemon.length).toBe(2);
+        expect(result.total).toBe(1351);
+        expect(result.hasMore).toBeTrue();
+        expect(result.pokemon[0].types).toEqual(['grass', 'poison']);
+        expect(result.pokemon[1].types).toEqual(['grass', 'poison']);
+        done();
+      });
+
+      const listReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon?limit=2&offset=0');
+      listReq.flush({
+        count: 1351,
+        results: [
+          { name: 'bulbasaur', url: 'https://pokeapi.co/api/v2/pokemon/1/' },
+          { name: 'ivysaur', url: 'https://pokeapi.co/api/v2/pokemon/2/' },
+        ],
+      });
+
+      const typeReq1 = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/1');
+      typeReq1.flush({
+        types: [{ type: { name: 'grass' } }, { type: { name: 'poison' } }],
+      });
+
+      const typeReq2 = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/2');
+      typeReq2.flush({
+        types: [{ type: { name: 'grass' } }, { type: { name: 'poison' } }],
+      });
+    });
+
+    it('should handle pagination HTTP error', (done) => {
+      service.getPokemonPage(24, 0).subscribe({
+        next: () => fail('Should have failed'),
+        error: (err) => {
+          expect(err.message).toBe('Unable to load Pokémon page.');
+          done();
+        },
+      });
+
+      httpMock
+        .expectOne('https://pokeapi.co/api/v2/pokemon?limit=24&offset=0')
+        .error(new ProgressEvent('Network error'));
+    });
+  });
+
+  describe('Search Functionality', () => {
+    it('should return empty list immediately for empty or whitespace query without network calls', (done) => {
+      service.searchPokemon('   ').subscribe((results) => {
+        expect(results).toEqual([]);
+        done();
+      });
+
+      httpMock.expectNone('https://pokeapi.co/api/v2/pokemon?limit=100000');
+    });
+
+    it('should directly lookup high ID (e.g. 1000) without sequentially downloading pages', (done) => {
+      service.searchPokemon('1000').subscribe((results) => {
+        expect(results.length).toBe(1);
+        expect(results[0].id).toBe(1000);
+        expect(results[0].name).toBe('gholdengo');
+        done();
+      });
+
+      // Must directly query /pokemon/1000
+      const pokemonReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/1000');
+      pokemonReq.flush({
+        id: 1000,
+        name: 'gholdengo',
+        types: [{ type: { name: 'steel' } }, { type: { name: 'ghost' } }],
+        stats: [],
+        abilities: [],
+      });
+
+      const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/1000');
+      speciesReq.flush({ flavor_text_entries: [] });
+
+      // Must NOT request full search index
+      httpMock.expectNone('https://pokeapi.co/api/v2/pokemon?limit=100000');
+    });
+
+    it('should perform exact name match using searchIndex and directly fetch details', (done) => {
+      service.searchPokemon('pikachu').subscribe((results) => {
+        expect(results.length).toBe(1);
+        expect(results[0].name).toBe('pikachu');
+        done();
+      });
+
+      const indexReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon?limit=100000');
+      indexReq.flush({
+        count: 2,
+        results: [
+          { name: 'bulbasaur', url: 'https://pokeapi.co/api/v2/pokemon/1/' },
+          { name: 'pikachu', url: 'https://pokeapi.co/api/v2/pokemon/25/' },
+        ],
+      });
+
+      const pokemonReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/25');
+      pokemonReq.flush({
+        id: 25,
+        name: 'pikachu',
+        types: [{ type: { name: 'electric' } }],
+        stats: [],
+        abilities: [],
+      });
+
+      const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/25');
+      speciesReq.flush({ flavor_text_entries: [] });
+    });
+
+    it('should perform partial search, limit to 50 matches, and hydrate types', (done) => {
+      service.searchPokemon('saur').subscribe((results) => {
+        expect(results.length).toBe(2);
+        expect(results[0].name).toBe('bulbasaur');
+        expect(results[1].name).toBe('ivysaur');
+        expect(results[0].types).toEqual(['grass']);
+        done();
+      });
+
+      const indexReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon?limit=100000');
+      indexReq.flush({
+        count: 3,
+        results: [
+          { name: 'bulbasaur', url: 'https://pokeapi.co/api/v2/pokemon/1/' },
+          { name: 'ivysaur', url: 'https://pokeapi.co/api/v2/pokemon/2/' },
+          { name: 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' },
+        ],
+      });
+
+      const typeReq1 = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/1');
+      typeReq1.flush({ types: [{ type: { name: 'grass' } }] });
+
+      const typeReq2 = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/2');
+      typeReq2.flush({ types: [{ type: { name: 'grass' } }] });
+    });
+
+    it('should return empty list when no matches are found in searchIndex', (done) => {
+      service.searchPokemon('nonexistent').subscribe((results) => {
+        expect(results).toEqual([]);
+        done();
+      });
+
+      const indexReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon?limit=100000');
+      indexReq.flush({ count: 0, results: [] });
+    });
+  });
+
+  describe('Cache Management', () => {
+    it('should clear all cache instances and localStorage when clearCache is called', () => {
+      service.cachePokemon(mockPikachu);
+      expect(service.pokemonCache().has('25')).toBeTrue();
+
+      service.clearCache();
+      expect(service.pokemonCache().size).toBe(0);
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    });
+  });
+
+  describe('Description and Flavor Text Parsing', () => {
+    it('should fall back to first flavor_text entry if English is missing', (done) => {
+      service.getPokemonDetails('30').subscribe((pokemon) => {
+        expect(pokemon.description).toBe('Japanese description text.');
+        done();
+      });
+
+      const pokemonReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/30');
+      pokemonReq.flush({
+        id: 30,
+        name: 'nidorina',
+        types: [{ type: { name: 'poison' } }],
+        stats: [],
+        abilities: [],
+      });
+
+      const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/30');
+      speciesReq.flush({
+        flavor_text_entries: [
+          {
+            flavor_text: 'Japanese\fdescription\ntext.',
+            language: { name: 'ja' },
+          },
+        ],
+      });
+    });
+
+    it('should handle species with missing or empty flavor_text_entries', (done) => {
+      service.getPokemonDetails('31').subscribe((pokemon) => {
+        expect(pokemon.description).toBe('No description available.');
+        done();
+      });
+
+      const pokemonReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/31');
+      pokemonReq.flush({
+        id: 31,
+        name: 'nidoqueen',
+        types: [{ type: { name: 'poison' } }],
+        stats: [],
+        abilities: [],
+      });
+
+      const speciesReq = httpMock.expectOne('https://pokeapi.co/api/v2/pokemon-species/31');
+      speciesReq.flush({ flavor_text_entries: [] });
+    });
+  });
+
+  describe('Evolution Chain Edge Cases', () => {
+    it('should format baby trigger item name properly', (done) => {
+      const mockBabyChain = {
+        id: 77,
+        baby_trigger_item: { name: 'sea-incense' },
+        chain: {
+          species: { name: 'azurill', url: 'https://pokeapi.co/api/v2/pokemon-species/298/' },
+          is_baby: true,
+          evolves_to: [],
+        },
+      };
+
+      service.getEvolutionChain('77').subscribe((chain) => {
+        expect(chain.babyTriggerItem).toBe('Sea Incense');
+        expect(chain.root.pokemon.name).toBe('azurill');
+        done();
+      });
+
+      httpMock.expectOne('https://pokeapi.co/api/v2/evolution-chain/77').flush(mockBabyChain);
+      httpMock.expectOne('https://pokeapi.co/api/v2/pokemon/298').flush({ types: [] });
+    });
+
+    it('should error when evolution chain API returns malformed data without chain node', (done) => {
+      service.getEvolutionChain('88').subscribe({
+        next: () => fail('Should have failed'),
+        error: (err) => {
+          expect(err.message).toBe('Unable to load evolution chain.');
+          done();
+        },
+      });
+
+      httpMock.expectOne('https://pokeapi.co/api/v2/evolution-chain/88').flush({ invalid: true });
+    });
+
+    it('should error when identifier is empty or whitespace', (done) => {
+      service.getEvolutionChain('   ').subscribe({
+        next: () => fail('Should have failed'),
+        error: (err) => {
+          expect(err.message).toBe('Invalid evolution chain identifier.');
+          done();
+        },
+      });
+
+      httpMock.expectNone('https://pokeapi.co/api/v2/evolution-chain/');
+    });
+  });
+
+  describe('formatEvolutionRequirements & formatItemName', () => {
+    it('should formatItemName with hyphenated words', () => {
+      expect(formatItemName('')).toBe('');
+      expect(formatItemName('thunder-stone')).toBe('Thunder Stone');
+      expect(formatItemName('deep-sea-scale')).toBe('Deep Sea Scale');
+    });
+
+    it('should format requirements for Base Stage when details are empty or non-array', () => {
+      expect(formatEvolutionRequirements([])).toEqual([{ description: 'Base Stage' }]);
+      expect(formatEvolutionRequirements(null as any)).toEqual([{ description: 'Base Stage' }]);
+    });
+
+    it('should format requirements with min_level, held_item, time_of_day, location', () => {
+      const result = formatEvolutionRequirements([
+        {
+          min_level: 20,
+          held_item: { name: 'razor-fang' },
+          time_of_day: 'night',
+          location: { name: 'sinnoh-route-217' },
+        },
+      ]);
+
+      expect(result[0].description).toBe('Level 20 + Hold Razor Fang + Night + at Sinnoh Route 217');
+      expect(result[0].minLevel).toBe(20);
+      expect(result[0].heldItem).toBe('Razor Fang');
+      expect(result[0].timeOfDay).toBe('Night');
+      expect(result[0].location).toBe('Sinnoh Route 217');
+    });
+
+    it('should format requirements with item use, happiness, affection, beauty', () => {
+      const result = formatEvolutionRequirements([
+        {
+          item: { name: 'moon-stone' },
+          min_happiness: 220,
+          min_affection: 2,
+          min_beauty: 170,
+        },
+      ]);
+
+      expect(result[0].description).toBe('Use Moon Stone + High Friendship + High Affection + High Beauty');
+      expect(result[0].item).toBe('Moon Stone');
+      expect(result[0].minHappiness).toBe(220);
+      expect(result[0].minAffection).toBe(2);
+      expect(result[0].minBeauty).toBe(170);
+    });
+
+    it('should format requirements with trade, shed, and other triggers', () => {
+      expect(formatEvolutionRequirements([{ trigger: { name: 'trade' } }])[0].description).toBe('Trade');
+      expect(formatEvolutionRequirements([{ trigger: { name: 'shed' } }])[0].description).toBe('Shed');
+      expect(formatEvolutionRequirements([{ trigger: { name: 'spin' } }])[0].description).toBe('Spin');
+    });
+
+    it('should format requirements with moves, move types, trade species, party species, party types', () => {
+      const result = formatEvolutionRequirements([
+        {
+          known_move: { name: 'ancient-power' },
+          known_move_type: { name: 'fairy' },
+          trade_species: { name: 'karrablast' },
+          party_species: { name: 'remoraid' },
+          party_type: { name: 'dark' },
+        },
+      ]);
+
+      expect(result[0].description).toBe(
+        'Learn Ancient Power + Fairy Move + for Karrablast + with Remoraid + with Dark-type',
+      );
+    });
+
+    it('should format gender (1=Female, 2=Male) and relative physical stats (1, -1, 0)', () => {
+      const femaleResult = formatEvolutionRequirements([{ gender: 1 }]);
+      expect(femaleResult[0].description).toBe('(Female)');
+
+      const maleResult = formatEvolutionRequirements([{ gender: 2 }]);
+      expect(maleResult[0].description).toBe('(Male)');
+
+      const atkGtDef = formatEvolutionRequirements([{ relative_physical_stats: 1 }]);
+      expect(atkGtDef[0].description).toBe('Atk > Def');
+
+      const atkLtDef = formatEvolutionRequirements([{ relative_physical_stats: -1 }]);
+      expect(atkLtDef[0].description).toBe('Atk < Def');
+
+      const atkEqDef = formatEvolutionRequirements([{ relative_physical_stats: 0 }]);
+      expect(atkEqDef[0].description).toBe('Atk = Def');
+    });
+
+    it('should format overworld rain and turn upside down conditions', () => {
+      const result = formatEvolutionRequirements([
+        {
+          needs_overworld_rain: true,
+          turn_upside_down: true,
+        },
+      ]);
+
+      expect(result[0].description).toBe('During Rain + Upside Down');
+      expect(result[0].needsOverworldRain).toBeTrue();
+      expect(result[0].turnUpsideDown).toBeTrue();
+    });
+  });
 });
+

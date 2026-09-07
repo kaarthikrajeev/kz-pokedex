@@ -49,18 +49,20 @@ This file is created for future AI reference regarding the `kz-pokedex` project 
   - Extracts `evolution_chain.url` from species data and recursively parses evolution trees into stage views (`EvolutionChain`, `EvolutionNode`, `EvolutionStage`).
   - Hydrates missing types for Pokémon in the chain without duplicate full-pokedex requests.
 - **PokemonListStateService**:
-  - Extracted from `App` component to handle pagination, search state, filtering, and intersection observer orchestration.
-  - Exposes Signals (`pokemon`, `searchQuery`, `selectedTypes`) and computed derived state (`filteredPokemon`, `hasMore`).
+  - Extracted from `App` component to handle pagination, search state, region filtering, type filtering, and intersection observer orchestration.
+  - Exposes Signals (`pokemon`, `searchQuery`, `selectedTypes`, `selectedRegion`) and computed derived state (`filteredPokemon`, `activeRegion`, `activeRegionLabel`, `totalPokemonCount`, `hasMore`).
+  - Integrates regional bounds for all 9 generations + Hisui (e.g. Kanto #1-#151, Johto #152-#251, Paldea #906-#1025).
 - **App Component**:
   - Handles page orchestration, modal detailed view state (`activePokemon`, `isShiny`), and preloads normal/shiny image URLs when a Pokémon is opened.
   - Orchestrates interactive navigation from evolution chain clicks back into the main detail loader.
 
 ## 🎨 UI & Layout (From visual references)
 - **Theme:** Dark mode background with a clean, grid-based layout.
-- **Header:** Title "ALL REGIONS POKÉDEX", accompanied by two statistics counters:
-  - **TOTAL POKÉMON:** Derives the global total from the PokeAPI pagination `count` field (reused directly from the initial page load to avoid duplicate requests).
-  - **VISIBLE ENTRIES:** The currently visible, filtered number of entries based on search and selected types.
+- **Header:** Title with dynamic eyebrow label (`ALL REGIONS` or `<REGION> REGION`), accompanied by two statistics counters:
+  - **TOTAL POKÉMON:** Derives the global total from PokeAPI or the active region count (e.g. 151 for Kanto, 100 for Johto).
+  - **VISIBLE ENTRIES:** The currently visible, filtered number of entries based on search, region, and selected types.
 - **Search:** A prominent input bar for searching by name or number.
+- **Region Selector:** Dedicated Neo-Brutalist panel with Pokeball icon header and interactive generation pills (All Regions, Kanto, Johto, Hoenn, Sinnoh, Unova, Kalos, Alola, Galar, Hisui, Paldea).
 - **Type Filter:** A row of colored, blocky buttons representing all Pokémon types (e.g., Normal, Fire, Water, Grass) supporting up to 2 active type filters (AND logic).
 - **Grid Layout:** Displays Pokémon cards in a responsive grid (e.g., 4 columns on desktop).
   - Each card shows the Pokédex number (`#001`), sprite image, name, and type badges.
@@ -79,3 +81,23 @@ This file is created for future AI reference regarding the `kz-pokedex` project 
     - Clickable cards that switch the active Pokémon detail smoothly.
     - Isolated loading and error states without blocking the parent detail view.
   - Small loader inside the image box for sprites, and a full Poké Ball loader for API requests.
+
+## 🧪 Testing Guidelines & Architecture
+
+### Testing Stack
+- **Framework:** Jasmine 5 + Karma 6 + ChromeHeadless (`@angular/build:karma`).
+- **Zoneless Testing:** Since the app uses `provideZonelessChangeDetection()`, do NOT use `fakeAsync()` or `tick()` from `@angular/core/testing` (which require `zone.js/testing`). Instead, use async/await, `(done: DoneFn)` with `setTimeout`, or `jasmine.clock()`.
+- **CI / Coverage Configuration:**
+  - `karma.conf.js` configured with `karma-junit-reporter` (`coverage/junit/test-results.xml`) and `karma-coverage` (`coverage/kz-pokedex`).
+  - Thresholds enforced: Statements $\ge 90\%$, Branches $\ge 80\%$, Functions $\ge 90\%$, Lines $\ge 90\%$.
+
+### Central Mock Factory (`src/testing/mock-data.ts`)
+- Use the shared mock factories rather than declaring ad-hoc inline objects:
+  - `createMockPokemon(overrides)`
+  - `createMockPokemonApiDetails(overrides)`
+  - `createMockSpeciesApiResponse(overrides)`
+  - `createMockEvolutionChain(overrides)`
+  - `createMockEvolutionChainApiResponse(overrides)`
+  - `createMockPaginatedResponse(count, results)`
+- Never make real HTTP calls or rely on external PokeAPI connectivity in unit tests; always use `provideHttpClientTesting()` with `HttpTestingController` or provide Spy objects.
+
