@@ -4,9 +4,10 @@ import { debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs/
 import { PokedexService } from './pokedex';
 import { FavoritesService } from './favorites';
 import { Pokemon } from '../models/types';
+import { getRegionById, isPokemonInRegion } from '../models/regions';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class PokemonListStateService {
   readonly #pokemonService = inject(PokedexService);
@@ -15,17 +16,32 @@ export class PokemonListStateService {
   readonly pokemon = signal<Pokemon[]>([]);
   readonly searchQuery = signal<string>('');
   readonly selectedTypes = signal<string[]>([]);
+  readonly selectedRegion = signal<string>('ALL');
   readonly showFavoritesOnly = signal<boolean>(false);
   readonly searchResults = signal<Pokemon[]>([]);
-  
+
   readonly loading = signal(false);
   readonly pageLoading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly totalPokemonCount = signal<number>(0);
+  readonly allPokemonTotalCount = signal<number>(0);
 
   readonly pageSize = 24;
   private pageOffset = 0;
   private searchSubject = new Subject<string>();
+
+  readonly activeRegion = computed(() => getRegionById(this.selectedRegion()));
+
+  readonly activeRegionLabel = computed(() => {
+    const region = this.activeRegion();
+    return region.id === 'ALL' ? 'ALL REGIONS' : `${region.name} REGION`;
+  });
+
+  readonly totalPokemonCount = computed(() => {
+    const region = this.activeRegion();
+    return region.id === 'ALL'
+      ? this.allPokemonTotalCount() || region.totalCount
+      : region.totalCount;
+  });
 
   readonly isSearching = computed(() => this.searchQuery().trim().length > 0);
 
@@ -33,6 +49,7 @@ export class PokemonListStateService {
     const isSearching = this.isSearching();
     const search = this.searchQuery().toLowerCase();
     const selectedTypes = this.selectedTypes();
+    const regionId = this.selectedRegion();
     const favSet = this.#favoritesService.favorites();
     const favoritesOnly = this.showFavoritesOnly();
 
@@ -40,12 +57,12 @@ export class PokemonListStateService {
 
     if (favoritesOnly) {
       const allKnown = new Map<number, Pokemon>();
-      this.pokemon().forEach(p => allKnown.set(p.id, p));
-      this.searchResults().forEach(p => allKnown.set(p.id, p));
-      this.#pokemonService.pokemonCache().forEach(p => allKnown.set(p.id, p));
-      
+      this.pokemon().forEach((p) => allKnown.set(p.id, p));
+      this.searchResults().forEach((p) => allKnown.set(p.id, p));
+      this.#pokemonService.pokemonCache().forEach((p) => allKnown.set(p.id, p));
+
       const combinedList: Pokemon[] = [];
-      favSet.forEach(id => {
+      favSet.forEach((id) => {
         if (allKnown.has(id)) {
           combinedList.push(allKnown.get(id)!);
         } else {
@@ -62,7 +79,7 @@ export class PokemonListStateService {
             baseExperience: 0,
             abilities: [],
             stats: [],
-            totalStats: 0
+            totalStats: 0,
           });
         }
       });
@@ -73,10 +90,11 @@ export class PokemonListStateService {
       if (favoritesOnly && !favSet.has(pokemon.id)) {
         return false;
       }
+      const matchesRegion = isPokemonInRegion(pokemon.id, regionId);
       const matchesSearch = isSearching || !search || pokemon.name.toLowerCase().includes(search);
       const matchesType =
         selectedTypes.length === 0 || selectedTypes.every((type) => pokemon.types.includes(type));
-      return matchesSearch && matchesType;
+      return matchesRegion && matchesSearch && matchesType;
     });
 
     return [...filtered].sort((a, b) => {
@@ -99,38 +117,46 @@ export class PokemonListStateService {
   });
 
   constructor() {
-    this.searchSubject.pipe(
-      debounceTime(300),
-      distinctUntilChanged(),
-      switchMap(query => {
-        if (!query) {
-          this.searchResults.set([]);
-          this.loading.set(false);
-          return of([]);
-        }
-        this.loading.set(true);
-        return this.#pokemonService.searchPokemon(query).pipe(
-          catchError(() => {
-            this.error.set('Unable to search Pokémon right now.');
+    this.searchSubject
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((query) => {
+          if (!query) {
+            this.searchResults.set([]);
+            this.loading.set(false);
             return of([]);
-          })
-        );
-      })
-    ).subscribe(results => {
-      this.searchResults.set(results);
-      this.loading.set(false);
-    });
+          }
+          this.loading.set(true);
+          return this.#pokemonService.searchPokemon(query).pipe(
+            catchError(() => {
+              this.error.set('Unable to search Pokémon right now.');
+              return of([]);
+            }),
+          );
+        }),
+      )
+      .subscribe((results) => {
+        this.searchResults.set(results);
+        this.loading.set(false);
+      });
   }
 
   loadInitialPage(): void {
+    const region = this.activeRegion();
+    this.pageOffset = region.startOffset;
     this.loading.set(true);
     this.error.set(null);
 
-    this.#pokemonService.getPokemonPage(this.pageSize, 0).subscribe({
+    const fetchLimit = Math.min(this.pageSize, region.totalCount);
+
+    this.#pokemonService.getPokemonPage(fetchLimit, this.pageOffset).subscribe({
       next: (response) => {
+        if (region.id === 'ALL') {
+          this.allPokemonTotalCount.set(response.total);
+        }
         this.pokemon.set(response.pokemon);
-        this.totalPokemonCount.set(response.total);
-        this.pageOffset = this.pageSize;
+        this.pageOffset += response.pokemon.length;
       },
       error: () => {
         this.error.set('Unable to load Pokémon right now. Please try again later.');
@@ -146,10 +172,18 @@ export class PokemonListStateService {
       return;
     }
 
+    const region = this.activeRegion();
+    const remaining = this.totalPokemonCount() - this.pokemon().length;
+    const fetchLimit = Math.min(this.pageSize, remaining);
+
+    if (fetchLimit <= 0) {
+      return;
+    }
+
     this.pageLoading.set(true);
     this.error.set(null);
 
-    this.#pokemonService.getPokemonPage(this.pageSize, this.pageOffset).subscribe({
+    this.#pokemonService.getPokemonPage(fetchLimit, this.pageOffset).subscribe({
       next: (response) => {
         this.pokemon.update((current) => [...current, ...response.pokemon]);
         this.pageOffset += response.pokemon.length;
@@ -161,6 +195,18 @@ export class PokemonListStateService {
         this.pageLoading.set(false);
       },
     });
+  }
+
+  selectRegion(regionId: string): void {
+    const targetRegion = getRegionById(regionId);
+    if (this.selectedRegion() === targetRegion.id) {
+      return;
+    }
+
+    this.selectedRegion.set(targetRegion.id);
+    this.pokemon.set([]);
+    this.pageOffset = targetRegion.startOffset;
+    this.loadInitialPage();
   }
 
   search(query: string): void {
@@ -191,9 +237,13 @@ export class PokemonListStateService {
   }
 
   clearFilters(): void {
+    const currentRegion = this.selectedRegion();
     this.searchQuery.set('');
     this.selectedTypes.set([]);
     this.showFavoritesOnly.set(false);
+    if (currentRegion !== 'ALL') {
+      this.selectRegion('ALL');
+    }
   }
 
   isTypeDisabled(type: string): boolean {

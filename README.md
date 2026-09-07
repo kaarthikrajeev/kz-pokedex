@@ -7,6 +7,7 @@
 ## ✨ Features
 
 *   📖 **Complete Roster:** Lists all Pokémon from the PokeAPI with numbered cards.
+*   🗺️ **Region Selection:** Dedicated interactive region selector panel supporting all 9 Pokémon generations (Kanto, Johto, Hoenn, Sinnoh, Unova, Kalos, Alola, Galar, Hisui, Paldea) and All Regions with region-bounded pagination and counts.
 *   🔄 **Infinite Scroll:** Loads Pokémon efficiently using pagination (24 per page).
 *   📊 **Total Count Tracking:** Displays the total number of Pokémon available from PokeAPI (reusing pagination metadata to avoid unnecessary requests), alongside the currently visible filtered Pokémon count.
 *   🎨 **Vibrant UI:** Displays Pokémon sprites and type badges with type-specific colors.
@@ -46,37 +47,78 @@ Equip your dependencies:
 
 ```bash
 npm install
+```
 
-## Angular Resource / httpResource Architecture
-- **rxResource Integration:** The detailed PokÃ©mon view leverages Angular 20's `rxResource` to automatically manage loading states, error states, and cancellation of stale requests during rapid navigation.
-- **Cache Integrity:** By wrapping the existing `PokedexService` Observable within `rxResource`, the application retains its highly optimized `Map`-based caching and RxJS-based request deduplication (`shareReplay`), ensuring we do not fetch the same data twice while still benefiting from modern signal-driven reactivity.
+Run the development server:
+
+```bash
+npm start
+```
+
+Navigate to `http://localhost:4200/` to explore the Pokédex!
+
+---
 
 ## 🏛️ Architecture
-App coordinates the detailed view state and delegates list orchestration to `PokemonListStateService`:
 
-Plaintext
+`App` coordinates the detailed view state and delegates list orchestration to `PokemonListStateService`:
+
+```
 PokeAPI
   -> PokedexService (caching, deduplication, HTTP logic)
   -> PokemonListStateService (search, pagination, filters)
   -> App Component (modal state, orchestrator)
   -> Standalone UI Components
-The UI is split into standalone components:
+```
 
-🎴 PokemonCardComponent: Renders one list entry and emits selection events.
+### Standalone UI Components:
+* 🎴 **`PokemonCardComponent`**: Renders one list entry, type badges, favorite status toggle with sound effect, and emits selection events.
+* 🔍 **`PokemonDetailsComponent`**: Renders the dialog content, sprite loading state, stats breakdown, cries audio player, interactive evolution tree, and shiny toggle.
+* 🔴 **`PokemonLoaderComponent`**: Provides the reusable rotating Poké Ball loader.
 
-🔍 PokemonDetailsComponent: Renders the dialog content, sprite loading state, skeleton, and shiny toggle.
+### Modern Angular 20 Features:
+* **`provideZonelessChangeDetection()`**: Completely zoneless reactivity powered by Signals and Computed values.
+* **`rxResource` Integration**: Pokémon details are queried using Angular 20's `rxResource()`, providing native `.isLoading()` / `.error()` status signals and automatic request cancellation when switching between Pokémon.
+* **Caching & Deduplication**: In-memory `Map` caching with `shareReplay` for in-flight requests and `localStorage` persistence.
 
-🔴 PokemonLoaderComponent: Provides the reusable rotating Poké Ball loader.
+---
 
-💾 Caching and Sprite Loading
-🧠 Completed detail responses and parsed evolution chains are stored in in-memory Maps.
+## 🧪 Testing Suite & Architecture
 
-🤝 Duplicate detail and evolution requests made while a request is pending share one observable through shareReplay.
+The application has a comprehensive automated test suite built with **Jasmine**, **Karma**, and **ChromeHeadless**, fully compatible with Zoneless Angular 20.
 
-🚀 Normal and shiny image URLs are preloaded only when a Pokémon is opened.
+### Test Commands
 
-🛡️ An in-memory Set prevents duplicate preloads during the current session.
+```bash
+# Run unit tests once in headless Chrome
+npm test
 
-📦 The browser's native HTTP image cache is reused (no cache-busting query parameters).
+# Run tests in continuous watch mode for development
+npm run test:watch
 
-🌀 The full Poké Ball loader is used for API loading. Secondary skeleton/spinners are used for evolution trees. A smaller loader inside the detail image box is used for sprites.
+# Run CI test suite with JUnit XML reporting
+npm run test:ci
+
+# Run test suite with code coverage analysis and enforce coverage thresholds
+npm run test:coverage
+```
+
+### Coverage Thresholds & Quality Metrics
+
+* **Statements:** $\ge 90\%$ (Current: **93.10%**)
+* **Branches:** $\ge 80\%$ (Current: **81.51%**)
+* **Functions:** $\ge 90\%$ (Current: **94.63%**)
+* **Lines:** $\ge 90\%$ (Current: **94.30%**)
+* **Total Tests:** 163 specs passing (0 failures)
+
+### Reporting & Artifacts
+
+* **Code Coverage Report:** `coverage/kz-pokedex/index.html` (and LCOV `coverage/kz-pokedex/lcov.info`)
+* **CI JUnit XML Report:** `coverage/junit/test-results.xml`
+
+### Test Architecture & Central Mocks
+
+* **Central Mock Factory (`src/testing/mock-data.ts`):** Provides strongly typed, centralized helper functions for synthesizing mock Pokémon models, PokeAPI detail payloads, species responses, evolution chains, and paginated lists with zero external network dependencies.
+* **Component Testing:** Covers `App`, `PokemonCardComponent`, `PokemonDetailsComponent`, and `PokemonLoaderComponent` across all user interactions, keyboard accessibility (`Enter`/`Space`), image error fallbacks, dialog/popover states, and audio/visual cues.
+* **Service Testing:** Full branch coverage across `PokedexService`, `PokemonListStateService`, `FavoritesService`, and `SoundService` (including Web Audio API synthesize logic, localStorage persistence, and cache eviction).
+

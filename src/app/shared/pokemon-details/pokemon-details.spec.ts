@@ -413,5 +413,129 @@ describe('PokemonDetailsComponent', () => {
       expect(cryBtn.classList.contains('pokemon-cry-button--playing')).toBeTrue();
       expect(cryBtn.getAttribute('aria-pressed')).toBe('true');
     });
+
+    it('should resolve cries.legacy if latest cry is not available', () => {
+      component.pokemon = {
+        id: 25,
+        name: 'pikachu',
+        types: ['electric'],
+        height: 0.4,
+        weight: 6,
+        sprite: 'pikachu.png',
+        cries: {
+          latest: null,
+          legacy: 'https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/legacy/25.ogg',
+        },
+      };
+      expect((component as any).effectiveCryUrl).toBe(
+        'https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/legacy/25.ogg',
+      );
+    });
+
+    it('should return correct cryButtonTitle and cryButtonAriaLabel in all conditions', () => {
+      const soundService = TestBed.inject(SoundService);
+      component.pokemon = null;
+      expect((component as any).cryButtonTitle).toBe('Cry audio unavailable');
+      expect((component as any).cryButtonAriaLabel).toBe('No cry audio available for Pokemon');
+
+      component.pokemon = {
+        id: 25,
+        name: 'pikachu',
+        types: ['electric'],
+        height: 0.4,
+        weight: 6,
+        sprite: 'pikachu.png',
+        cryUrl: 'pikachu.ogg',
+      };
+      soundService.soundEnabled.set(false);
+      expect((component as any).cryButtonTitle).toBe('Sound disabled (click to play cry)');
+      expect((component as any).cryButtonAriaLabel).toBe('Play cry for pikachu');
+
+      soundService.soundEnabled.set(true);
+      expect((component as any).cryButtonTitle).toBe('Play Pokémon Cry');
+
+      soundService.isPlaying.set(true);
+      soundService.currentCryUrl.set('pikachu.ogg');
+      expect((component as any).cryButtonTitle).toBe('Playing Pokémon Cry...');
+      expect((component as any).cryButtonAriaLabel).toBe('Playing cry audio for pikachu');
+    });
+  });
+
+  describe('Favorite & Interaction Features', () => {
+    it('should toggle favorite and play catch sound when favorited', () => {
+      const soundService = TestBed.inject(SoundService);
+      spyOn(soundService, 'playPokeballCatchSound');
+
+      component.pokemon = mockPokemon;
+      const event = new MouseEvent('click');
+      spyOn(event, 'stopPropagation');
+
+      (component as any).toggleFavorite(event);
+      expect(event.stopPropagation).toHaveBeenCalled();
+      expect((component as any).isFavorite).toBeTrue();
+      expect(soundService.playPokeballCatchSound).toHaveBeenCalled();
+
+      (component as any).toggleFavorite(event);
+      expect((component as any).isFavorite).toBeFalse();
+    });
+
+    it('should handle image load and error events', () => {
+      spyOn(component.imageError, 'emit');
+      const errEvent = new Event('error');
+
+      (component as any).onSpriteError(errEvent);
+      expect((component as any).spriteLoading()).toBeFalse();
+      expect(component.imageError.emit).toHaveBeenCalledWith(errEvent);
+
+      (component as any).onSpriteLoad();
+      expect((component as any).spriteLoading()).toBeFalse();
+    });
+
+    it('should calculate total stats correctly with and without stats array', () => {
+      component.pokemon = {
+        ...mockPokemon,
+        stats: [
+          { name: 'hp', displayName: 'HP', baseStat: 45, percentage: 18 },
+          { name: 'attack', displayName: 'ATK', baseStat: 49, percentage: 20 },
+        ],
+      };
+      expect((component as any).totalStats).toBe(94);
+      expect((component as any).stats.length).toBe(2);
+
+      component.pokemon = {
+        ...mockPokemon,
+        stats: [],
+        totalStats: 318,
+      };
+      expect((component as any).totalStats).toBe(318);
+    });
+
+    it('should choose shiny sprite in getSpriteForEvolution when shiny is active', () => {
+      const evoPoke = {
+        id: 2,
+        name: 'ivysaur',
+        sprite: '2.png',
+        spriteShiny: '2s.png',
+        types: ['grass'],
+        isBaby: false,
+      };
+
+      component.shiny = false;
+      expect((component as any).getSpriteForEvolution(evoPoke)).toBe('2.png');
+
+      component.shiny = true;
+      expect((component as any).getSpriteForEvolution(evoPoke)).toBe('2s.png');
+    });
+
+    it('should reset evolution state when pokemon is set to null', () => {
+      component.pokemon = null;
+      component.ngOnChanges({
+        pokemon: new SimpleChange(mockPokemon, null, false),
+      });
+
+      expect((component as any).evolutionChain()).toBeNull();
+      expect((component as any).evolutionLoading()).toBeFalse();
+      expect((component as any).evolutionError()).toBeNull();
+    });
   });
 });
